@@ -67,6 +67,13 @@ chore: update PROCESS.md
 
 **Important**: Since we use squash merge, PR title = commit message that remains in main
 
+### PR Template
+
+- **For `feat/` branches only**: Use the PR template to verify testing before integration
+- The PR template includes a testing checklist to ensure features are tested before merging
+- Template location: `.github/pull_request_template.md`
+- For `chore/` branches, the template is optional
+
 ## Collaboration Structure
 
 ### Teams
@@ -107,6 +114,7 @@ chore: update PROCESS.md
    - Push branch to remote
    - Create PR on GitHub
    - PR title: `feat: <summary>` or `chore: <summary>`
+   - **For `feat/` branches only**: Use the PR template (`.github/pull_request_template.md`) to verify testing before integration
    - Include Requirement ID in PR description (if applicable)
 
 5. **Wait for Review**
