@@ -1,0 +1,3 @@
+[submodule "vendor/interaction_autonomous_navigation"]
+	path = vendor/interaction_autonomous_navigation
+	url = https://github.com/KIST-delight-robotics/Interaction_AutonomousNavigation.git
