@@ -63,11 +63,307 @@ The OM1 platform is organized into 8 main modules:
 - Component lifecycle management
 - Single/Multi mode selection
 
-### Config Definition
+### Config Definition and Ownership
 
-Each module developer defines their own config structure in JSON5 files:
-- **Single Mode**: Config defined directly in root level (`agent_inputs`, `agent_actions`, etc.)
-- **Multi Mode**: Config defined within each mode (`modes.<mode_name>.agent_inputs`, etc.)
+**Important**: Config file structure is managed by Runtime Core (SYS-CORE), but **each config section is owned and maintained by its respective module developer**.
+
+- **Config Structure**: Runtime Core defines the overall config file structure and loading mechanism
+- **Config Content**: Each module developer is responsible for defining and maintaining their own config sections:
+  - **PER-INPUT**: Defines `agent_inputs` structure and Sensor config fields
+  - **AGT-FUSER**: Defines `system_prompt_base`, `system_governance`, `system_prompt_examples` structure
+  - **AGT-LLM**: Defines `cortex_llm` structure and LLM config fields
+  - **NAV-ACTION**: Defines `agent_actions` structure and Action config fields
+  - **SYS-BG**: Defines `backgrounds` structure and Background config fields
+  - **SYS-SIM**: Defines `simulators` structure and Simulator config fields
+  - **SYS-CORE**: Defines global runtime settings (`version`, `hertz`, `name`, `api_key`, `URID`, `unitree_ethernet`, `robot_ip`, mode system settings)
+
+When adding new config fields or modifying existing ones, the responsible module developer should:
+1. Update their module's config class (e.g., `SensorConfig`, `ActionConfig`, `LLMConfig`)
+2. Document the new fields in their module's documentation
+3. Update config examples if needed
+
+### Config File Structure and Module Mapping
+
+#### Single Mode Config
+
+Single mode config files define all components at the root level. Each section maps to a specific module:
+
+| Config Field | Module | Description | Example Values |
+|-------------|--------|-------------|----------------|
+| `version` | **SYS-CORE** | Runtime version (for compatibility checking) | `"v1.0.1"` |
+| `hertz` | **SYS-CORE** | Execution frequency (Hz) for cortex loop | `10`, `1`, `0.01` |
+| `name` | **SYS-CORE** | Config name identifier | `"bits_basic"`, `"turtle_speak"` |
+| `api_key` | **SYS-CORE** | Global API key (passed to all components) | `"openmind_free"`, `"your_api_key"` |
+| `URID` | **SYS-CORE** | Unitree Robot ID (for multi-robot deployments) | `"default"`, `"robot_001"` |
+| `unitree_ethernet` | **SYS-CORE** | Ethernet adapter name for Unitree robots | `"en0"`, `"enP2p1s0"` |
+| `robot_ip` | **SYS-CORE** | Robot IP address (optional, can use .env) | `"192.168.0.241"` |
+| `system_prompt_base` | **AGT-FUSER** | Base system prompt for LLM | `"You are a smart, curious, and friendly dog..."` |
+| `system_governance` | **AGT-FUSER** | Governance rules (e.g., Asimov's laws) | `"First Law: A robot cannot harm..."` |
+| `system_prompt_examples` | **AGT-FUSER** | Example interactions for LLM | `"Here are some examples..."` |
+| `agent_inputs` | **PER-INPUT** | Array of Sensor configurations | `[{"type": "Gps"}, {"type": "VLMGemini", "config": {...}}]` |
+| `cortex_llm` | **AGT-LLM** | LLM configuration | `{"type": "OpenAILLM", "config": {...}}` |
+| `agent_actions` | **NAV-ACTION** | Array of Action configurations | `[{"name": "speak", "connector": "elevenlabs_tts", ...}]` |
+| `backgrounds` | **SYS-BG** | Array of Background configurations | `[{"type": "Gps"}, {"type": "UnitreeGo2State"}]` |
+| `simulators` | **SYS-SIM** | Array of Simulator configurations (optional) | `[{"type": "WebSim", "config": {...}}]` |
+
+**Example Single Mode Config**:
+```json5
+{
+  "version": "v1.0.1",
+  "hertz": 10,
+  "name": "bits_basic",
+  "unitree_ethernet": "en0",
+  "api_key": "openmind_free",
+  "system_prompt_base": "You are a smart, curious, and friendly dog...",
+  "system_governance": "First Law: A robot cannot harm...",
+  "system_prompt_examples": "Here are some examples...",
+  "agent_inputs": [
+    {
+      "type": "VLM_COCO_Local",
+      "config": {
+        "camera_index": 0
+      }
+    },
+    {
+      "type": "UnitreeGo2Battery"
+    }
+  ],
+  "cortex_llm": {
+    "type": "OpenAILLM",
+    "config": {
+      "agent_name": "Bits",
+      "history_length": 10
+    }
+  },
+  "agent_actions": [
+    {
+      "name": "speak",
+      "llm_label": "speak",
+      "connector": "elevenlabs_tts",
+      "config": {
+        "voice_id": "TbMNBJ27fH2U0VgpSNko",
+        "silence_rate": 0
+      }
+    }
+  ],
+  "backgrounds": [
+    {
+      "type": "UnitreeGo2State"
+    }
+  ]
+}
+```
+
+#### Multi Mode Config
+
+Multi mode config files define a mode system with multiple operational modes. Global settings apply to all modes, while mode-specific settings override or extend global settings.
+
+**Global Level (Root)**:
+
+| Config Field | Module | Description | Example Values |
+|-------------|--------|-------------|----------------|
+| `version` | **SYS-CORE** | Runtime version | `"v1.0.1"` |
+| `default_mode` | **SYS-CORE** | Initial mode to activate | `"welcome"`, `"autonomous"` |
+| `allow_manual_switching` | **SYS-CORE** | Allow manual mode switching | `true`, `false` |
+| `mode_memory_enabled` | **SYS-CORE** | Enable mode memory/state persistence | `true`, `false` |
+| `api_key` | **SYS-CORE** | Global API key (passed to all modes) | `"openmind_free"` |
+| `URID` | **SYS-CORE** | Unitree Robot ID | `"default"` |
+| `unitree_ethernet` | **SYS-CORE** | Ethernet adapter name | `"enP2p1s0"` |
+| `robot_ip` | **SYS-CORE** | Robot IP address | `"192.168.0.241"` |
+| `system_governance` | **AGT-FUSER** | Global governance rules (applied to all modes) | `"First Law: A robot cannot harm..."` |
+| `system_prompt_examples` | **AGT-FUSER** | Global examples (applied to all modes) | `"Here are some examples..."` |
+| `cortex_llm` | **AGT-LLM** | Global LLM config (used if mode doesn't override) | `{"type": "OpenAILLM", "config": {...}}` |
+| `global_lifecycle_hooks` | **SYS-CORE** | Lifecycle hooks executed for all modes | `[{"hook_type": "on_startup", ...}]` |
+| `modes` | **SYS-CORE** | Mode definitions (see Mode Level below) | `{"welcome": {...}, "slam": {...}}` |
+| `transition_rules` | **SYS-CORE** | Rules for transitioning between modes | `[{"from_mode": "welcome", "to_mode": "slam", ...}]` |
+
+**Mode Level** (within `modes.<mode_name>`):
+
+| Config Field | Module | Description | Example Values |
+|-------------|--------|-------------|----------------|
+| `display_name` | **SYS-CORE** | Human-readable mode name | `"Welcome Mode"`, `"SLAM Exploration"` |
+| `description` | **SYS-CORE** | Mode description | `"Initial greeting and user information gathering"` |
+| `system_prompt_base` | **AGT-FUSER** | Mode-specific system prompt | `"You are Bits in exploration mode..."` |
+| `hertz` | **SYS-CORE** | Mode-specific execution frequency | `1`, `0.01` |
+| `timeout_seconds` | **SYS-CORE** | Mode timeout (optional) | `300.0` |
+| `save_interactions` | **SYS-CORE** | Save interactions for this mode | `true`, `false` |
+| `remember_locations` | **SYS-CORE** | Remember locations in this mode | `true`, `false` |
+| `cortex_llm` | **AGT-LLM** | Mode-specific LLM (overrides global) | `{"type": "OpenAILLM", "config": {...}}` |
+| `agent_inputs` | **PER-INPUT** | Mode-specific Sensor configurations | `[{"type": "Odom"}, {"type": "VLMVilaRTSP"}]` |
+| `agent_actions` | **NAV-ACTION** | Mode-specific Action configurations | `[{"name": "speak", "connector": "elevenlabs_tts", ...}]` |
+| `backgrounds` | **SYS-BG** | Mode-specific Background configurations | `[{"type": "UnitreeGo2State"}]` |
+| `simulators` | **SYS-SIM** | Mode-specific Simulator configurations | `[{"type": "WebSim"}]` |
+| `lifecycle_hooks` | **SYS-CORE** | Mode-specific lifecycle hooks | `[{"hook_type": "on_entry", "handler_type": "message", ...}]` |
+
+**Transition Rules** (within `transition_rules`):
+
+| Config Field | Module | Description | Example Values |
+|-------------|--------|-------------|----------------|
+| `from_mode` | **SYS-CORE** | Source mode name (or `"*"` for any mode) | `"welcome"`, `"*"` |
+| `to_mode` | **SYS-CORE** | Target mode name | `"slam"`, `"navigation"` |
+| `transition_type` | **SYS-CORE** | Transition trigger type | `"input_triggered"`, `"time_based"`, `"context_aware"` |
+| `trigger_keywords` | **SYS-CORE** | Keywords that trigger transition | `["explore", "map", "navigate"]` |
+| `priority` | **SYS-CORE** | Rule priority (higher = more important) | `1`, `5` |
+| `cooldown_seconds` | **SYS-CORE** | Minimum time before rule can trigger again | `5.0`, `10.0` |
+| `timeout_seconds` | **SYS-CORE** | For time-based transitions | `300.0` |
+| `context_conditions` | **SYS-CORE** | Context conditions for context-aware transitions | `{"exploration_done": true}` |
+
+**Example Multi Mode Config**:
+```json5
+{
+  "version": "v1.0.1",
+  "default_mode": "welcome",
+  "allow_manual_switching": true,
+  "mode_memory_enabled": true,
+  "api_key": "openmind_free",
+  "unitree_ethernet": "enP2p1s0",
+  "system_governance": "First Law: A robot cannot harm...",
+  "cortex_llm": {
+    "type": "OpenAILLM",
+    "config": {
+      "agent_name": "Bits",
+      "history_length": 10
+    }
+  },
+  "modes": {
+    "welcome": {
+      "display_name": "Welcome Mode",
+      "description": "Initial greeting and user information gathering",
+      "system_prompt_base": "You are Bits, a friendly robotic dog...",
+      "hertz": 0.01,
+      "agent_inputs": [
+        {"type": "Odom"},
+        {"type": "GoogleASRRTSPInput"}
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "voice_id": "TbMNBJ27fH2U0VgpSNko",
+            "silence_rate": 0
+          }
+        }
+      ],
+      "backgrounds": [
+        {"type": "UnitreeGo2State"}
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_startup",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Hello! I'm Bits, your robotic companion."
+          }
+        }
+      ]
+    },
+    "slam": {
+      "display_name": "SLAM Exploration",
+      "description": "Autonomous navigation and mapping mode",
+      "system_prompt_base": "You are Bits in exploration mode...",
+      "hertz": 1,
+      "agent_inputs": [
+        {"type": "Odom"},
+        {"type": "VLMVilaRTSP"}
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "voice_id": "TbMNBJ27fH2U0VgpSNko",
+            "silence_rate": 20
+          }
+        }
+      ],
+      "backgrounds": [
+        {"type": "UnitreeGo2State"},
+        {"type": "UnitreeGo2Navigation"}
+      ]
+    }
+  },
+  "transition_rules": [
+    {
+      "from_mode": "welcome",
+      "to_mode": "slam",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["explore", "map", "navigate"],
+      "priority": 3,
+      "cooldown_seconds": 5.0
+    }
+  ]
+}
+```
+
+### Config Field Details
+
+#### Sensor Config (`agent_inputs[].config`)
+
+Defined by **PER-INPUT** module developers. Each Sensor plugin defines its own config structure.
+
+**Common Fields** (defined by Sensor base class):
+- Inherited from `SensorConfig` base class
+
+**Plugin-Specific Fields** (examples):
+- `Gps`: No additional config fields (uses default)
+- `VLMGemini`: `api_key`, `base_url`, `camera_index`, `stream_base_url`
+- `RPLidar`: `half_width_robot`, `use_zenoh`, `relevant_distance_max`, `sensor_mounting_angle`, `angles_blanked`
+- `Odom`: `use_zenoh`, `URID`, `unitree_ethernet`
+
+#### LLM Config (`cortex_llm.config`)
+
+Defined by **AGT-LLM** module developers. Each LLM plugin defines its own config structure.
+
+**Common Fields**:
+- `agent_name`: Name of the agent (used in prompts)
+- `history_length`: Number of previous interactions to include in context
+
+**Plugin-Specific Fields** (examples):
+- `OpenAILLM`: `model` (e.g., `"gpt-4.1"`, `"gpt-4"`)
+- `GeminiLLM`: `model`, `temperature`
+- `DeepSeekLLM`: `model`, `temperature`
+
+#### Action Config (`agent_actions[].config`)
+
+Defined by **NAV-ACTION** module developers. Each Action connector defines its own config structure.
+
+**Common Fields** (at action level):
+- `name`: Action name (must match action directory name)
+- `llm_label`: Label shown to LLM in function schema
+- `connector`: Connector name (must match connector file name)
+- `exclude_from_prompt`: Whether to exclude from LLM prompt (default: `false`)
+- `implementation`: `"passthrough"` or custom implementation
+
+**Connector-Specific Fields** (examples):
+- `elevenlabs_tts`: `voice_id`, `silence_rate`
+- `unitree_go2_nav`: `timeout_seconds`, `goal_tolerance`
+- `zenoh`: `topic`, `message_type`
+
+#### Background Config (`backgrounds[].config`)
+
+Defined by **SYS-BG** module developers. Each Background plugin defines its own config structure.
+
+**Common Fields**:
+- Inherited from `BackgroundConfig` base class
+
+**Plugin-Specific Fields** (examples):
+- `Gps`: `serial_port`, `baud_rate`
+- `UnitreeGo2State`: No additional config (uses default)
+- `UnitreeGo2Navigation`: `nav2_config_path`, `use_sim_time`
+
+#### Simulator Config (`simulators[].config`)
+
+Defined by **SYS-SIM** module developers. Each Simulator plugin defines its own config structure.
+
+**Common Fields**:
+- Inherited from `SimulatorConfig` base class
+
+**Plugin-Specific Fields** (examples):
+- `WebSim`: `port`, `host`
+- `ConsoleSim`: No additional config (uses default)
 
 ---
 
@@ -786,7 +1082,13 @@ class Realsense(Background[RealsenseConfig]):
 ┌─────────────────────────────────────────────────────────┐
 │              Runtime Core (CortexRuntime)                │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  InputOrchestrator → Sensors → formatted_latest() │  │
+│  │  InputOrchestrator                                │  │
+│  │    ↓                                               │  │
+│  │  Sensors (Gps, Odom, RPLidar, VLM, ...)          │  │
+│  │    ↓ (대부분의 Sensor)                              │  │
+│  │  Providers (GpsProvider, OdomProvider, ...)      │  │
+│  │    ↓ (데이터 읽기)                                  │  │
+│  │  formatted_latest_buffer() → LLM Input Text       │  │
 │  └───────────────────────────────────────────────────┘  │
 │                          ↓                                │
 │  ┌───────────────────────────────────────────────────┐  │
@@ -805,8 +1107,6 @@ class Realsense(Background[RealsenseConfig]):
 │  SimulatorOrchestrator → Simulators                      │
 └─────────────────────────────────────────────────────────┘
 ```
-
----
 
 ## Config File Structure
 
