@@ -1,0 +1,62 @@
+{
+  "version": "v1.0.1",
+  "hertz": 0.001,
+  "name": "test_gui_audio_ws",
+  "api_key": "dummy",
+  "system_prompt_base": "GUI audio-level websocket broadcast test mode.",
+  "system_governance": "Safety policies are unchanged.",
+  "system_prompt_examples": "",
+
+  // LLM is required by runtime config schema.
+  // Very low hertz keeps cortex ticks (and LLM calls) effectively idle during WS test.
+  "agent_inputs": [],
+  "simulators": [],
+  "agent_actions": [],
+  "cortex_llm": {
+    "type": "OpenAILLM",
+    "config": {
+      "api_key": "dummy",
+      "model": "gpt-4.1-mini",
+      "agent_name": "GUIAudioTest",
+      "history_length": 0,
+      "timeout": 2
+    }
+  },
+
+  // Providers are instantiated and managed by these backgrounds:
+  // - AudioBg -> AudioProvider
+  // - STTBg   -> STTProvider (and attaches AudioProvider)
+  // - GUIBg   -> reads AudioProvider.get_audio_level() and broadcasts float payload
+  "backgrounds": [
+    {
+      "type": "AudioBg",
+      "config": {
+        "sample_rate": 16000,
+        "chunk_size": 1024,
+        "channels": 1,
+        "vad_enabled": false,
+        "vad_threshold": 0.5,
+        "health_check_interval_sec": 10.0
+      }
+    },
+    {
+      "type": "STTBg",
+      "config": {
+        "backend": "local",
+        "language": "korean",
+        "sample_rate": 16000,
+        "health_check_interval_sec": 10.0
+      }
+    },
+    {
+      "type": "GUIBg",
+      "config": {
+        "host": "0.0.0.0",
+        "port": 8767,
+        "ws_path": "/voice_spectrum",
+        "broadcast_interval_sec": 0.05,
+        "health_check_interval_sec": 10.0
+      }
+    }
+  ]
+}
