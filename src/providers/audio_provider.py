@@ -23,6 +23,7 @@ import math
 import queue
 import struct
 import threading
+from collections import deque
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
@@ -99,6 +100,11 @@ class AudioProvider:
         self._current_audio_level: float = 0.0
         self._is_voice_active: bool = False
         self._lock = threading.Lock()
+        self._audio_level_window_buffer = bytearray()
+        self._recent_peak_levels = deque([0.0, 0.0, 0.0], maxlen=3)
+        self._audio_level_window_bytes = 0
+        self._audio_level_tail_samples = 0
+        self._init_audio_level_tracker()
 
         # 오디오 버퍼 (queue 기반)
         self._audio_buffer: "queue.Queue[bytes]"
@@ -155,6 +161,45 @@ class AudioProvider:
             logging.error("SileroVAD init failed: %s", e)
             self._vad_engine = None
             self.vad_enabled = False
+
+    def _init_audio_level_tracker(self) -> None:
+        """
+        오디오 레벨 계산기 초기화.
+
+        64ms 단위로 계산하고, 각 64ms 윈도우의 마지막 10ms peak를
+        3점 이동평균으로 평활화합니다.
+        """
+        window_frames = max(1, int(self.sample_rate * 64 / 1000))
+        tail_frames = max(1, int(self.sample_rate * 10 / 1000))
+        self._audio_level_window_bytes = window_frames * self.channels * 2
+        self._audio_level_tail_samples = tail_frames * self.channels
+        self._audio_level_window_buffer.clear()
+        self._recent_peak_levels = deque([0.0, 0.0, 0.0], maxlen=3)
+
+    def _compute_smoothed_peak_level(self, window_bytes: bytes) -> Optional[float]:
+        """
+        64ms 윈도우에서 마지막 10ms peak를 구하고 3점 이동평균을 계산합니다.
+
+        Returns
+        -------
+        Optional[float]
+            계산된 레벨(0.0~1.0) 또는 계산 불가 시 None
+        """
+        sample_count = len(window_bytes) // 2
+        if sample_count == 0:
+            return None
+
+        samples = struct.unpack("<" + "h" * sample_count, window_bytes)
+
+        # 마지막 10ms 구간 peak amplitude
+        tail_samples = max(1, min(self._audio_level_tail_samples, sample_count))
+        tail = samples[-tail_samples:]
+        peak = max(abs(s) for s in tail)
+        peak_norm = min(1.0, peak / 32768.0)
+
+        # volume = (p_{k-2} + p_{k-1} + p_k) / 3
+        self._recent_peak_levels.append(peak_norm)
+        return sum(self._recent_peak_levels) / 3.0
 
     # ---- Device resolution ----
 
@@ -242,14 +287,21 @@ class AudioProvider:
         if not audio_chunk:
             return
         try:
-            sample_count = len(audio_chunk) // 2
-            if sample_count == 0:
-                return
-            samples = struct.unpack("<" + "h" * sample_count, audio_chunk)
-            rms = math.sqrt(sum(s * s for s in samples) / sample_count)
-            level = min(1.0, rms / 32768.0)
-            with self._lock:
-                self._current_audio_level = level
+            self._audio_level_window_buffer.extend(audio_chunk)
+
+            # 충분한 buffer가 모일때마다 계산
+            while len(self._audio_level_window_buffer) >= self._audio_level_window_bytes:
+                window_bytes = self._audio_level_window_buffer[
+                    : self._audio_level_window_bytes
+                ]
+                del self._audio_level_window_buffer[: self._audio_level_window_bytes]
+
+                level = self._compute_smoothed_peak_level(window_bytes)
+                if level is None:
+                    continue
+
+                with self._lock:
+                    self._current_audio_level = level
         except Exception as e:
             logging.error("Audio level update failed: %s", e)
 
@@ -395,6 +447,7 @@ class AudioProvider:
 
         if sample_rate is not None and sample_rate != self.sample_rate:
             self.sample_rate = sample_rate
+            self._init_audio_level_tracker()
             restart_needed = True
             vad_reinit_needed = True
 
