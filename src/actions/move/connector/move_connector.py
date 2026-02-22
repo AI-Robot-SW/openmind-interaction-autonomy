@@ -22,7 +22,9 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
     def __init__(self, config: MoveConfig):
         super().__init__(config)
         self.unitree_go2_provider = UnitreeGo2Provider()
-        # TODO: self.nav_provider = NavProvider()
+        # TODO: self._nav_provider = NavProvider()
+        self._nav_provider = None
+        self._already_stopped = False  # True after first stop_move() in a streak of Nones
 
     async def connect(self, output_interface: MoveInput) -> None:
         """
@@ -52,7 +54,7 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
             elif action_val == "damp":
                 self.unitree_go2_provider.damp()
             elif action_val == "stop move":
-                self.unitree_go2_provider.stop_move()
+                pass  # TODO: NavProvider.set_goal(None)
             else:
                 logging.warning("Unknown move type: %s", output_interface.action)
                 raise ValueError(f"Unknown move type: {output_interface.action}")
@@ -64,9 +66,12 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
 
     def tick(self) -> None:
         time.sleep(0.1)
-        # move_cmd = NavProvider.get_next_move()  # None or MoveCmd
-        # if move_cmd is not None:
-        #     self.unitree_go2_provider.move(move_cmd.vx, move_cmd.vy, move_cmd.vyaw)
-        # else:
-        #    pass
+        move_cmd = self._nav_provider.get_next_move() if self._nav_provider else None
+        if move_cmd is not None:
+            self.unitree_go2_provider.move(move_cmd.vx, move_cmd.vy, move_cmd.vyaw)
+            self._already_stopped = False
+        else:
+            if not self._already_stopped:
+                self.unitree_go2_provider.stop_move()
+                self._already_stopped = True
 

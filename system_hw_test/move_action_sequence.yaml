@@ -1,0 +1,36 @@
+# Move action HW test sequence (LLM output mocking).
+# Used by: system_hw_test/move_action_hw_test.py
+#
+# Valid action values (MovementAction enum):
+#   - "go to L1"   | "go to L2"   | "go to L3"
+#   - "slow down"  | "speed up"
+#   - "stand up"   | "stand down" | "damp" | "stop move"
+# Note: "stop move" in connect() is no-op (TODO NavProvider.set_goal(None)); tick() still calls stop_move() when get_next_move() returns None.
+#
+# Sequence format:
+#   - Each item is either a string (action only) or { action: "...", delay_after_sec: N }.
+#   - String: run that action, then wait output_interval_sec before the next.
+#   - Object: run action, then wait delay_after_sec before the next (overrides default).
+#   - Order and timing are fully configurable per step.
+
+# Default delay after each output when not specified (seconds)
+output_interval_sec: 1.0
+
+# How many times to run the sequence. 1 = once, 2 = twice. 0 = infinite until Ctrl+C
+repeat_count: 1
+
+# Ordered list: action only (use default interval) or { action, delay_after_sec }
+# Example: stand up → wait 10s → go to L1 → wait 8s → speed up → wait 5s → stand down
+sequence:
+  - action: "stand up"
+    delay_after_sec: 10
+  - action: "go to L1"
+    delay_after_sec: 8
+  - action: "speed up"
+    delay_after_sec: 5
+  - action: "slow down"
+    delay_after_sec: 3
+  - action: "stop move"
+    delay_after_sec: 2
+  - action: "stand down"
+    delay_after_sec: 0
