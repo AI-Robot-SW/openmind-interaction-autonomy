@@ -3,7 +3,7 @@ Tests for UnitreeGo2Bg (Unitree Go2 Background).
 
 Follows .cursor/skills/background-testing/SKILL.md:
 - Patch UnitreeGo2Provider in backgrounds.plugins.unitree_go2_bg (no robot/SDK).
-- Fixtures: config, config_with_ethernet.
+- Fixtures: config, config_with_ethernet, config_custom_topic.
 - Test: config init, Background init (Provider args + start()), config derivation, name, config access, run(), init failure.
 
 Run: uv run pytest tests/backgrounds/test_unitree_go2_bg.py -v
@@ -21,7 +21,7 @@ from backgrounds.plugins.unitree_go2_bg import UnitreeGo2Bg, UnitreeGo2BgConfig
 
 @pytest.fixture
 def config():
-    """Default config: no ethernet, default timeout."""
+    """Default config: no ethernet, default timeout, default state_topic."""
     return UnitreeGo2BgConfig()
 
 
@@ -31,6 +31,16 @@ def config_with_ethernet():
     return UnitreeGo2BgConfig(unitree_ethernet="eth0", timeout=10.0)
 
 
+@pytest.fixture
+def config_custom_topic():
+    """Config with custom state_topic."""
+    return UnitreeGo2BgConfig(
+        unitree_ethernet="eth0", 
+        timeout=10.0, 
+        state_topic="rt/custom_state"
+    )
+
+
 # ----- Config -----
 
 
@@ -38,11 +48,17 @@ def test_config_initialization():
     """Config class default and custom values."""
     cfg = UnitreeGo2BgConfig()
     assert cfg.unitree_ethernet is None
-    assert cfg.timeout == 1.0
+    assert cfg.timeout == 10.0  # Updated default
+    assert cfg.state_topic == "rt/sportmodestate"
 
-    cfg_custom = UnitreeGo2BgConfig(unitree_ethernet="eth0", timeout=5.0)
+    cfg_custom = UnitreeGo2BgConfig(
+        unitree_ethernet="eth0", 
+        timeout=5.0,
+        state_topic="rt/custom"
+    )
     assert cfg_custom.unitree_ethernet == "eth0"
     assert cfg_custom.timeout == 5.0
+    assert cfg_custom.state_topic == "rt/custom"
 
 
 # ----- Initialization -----
@@ -56,20 +72,45 @@ def test_background_initialization(mock_provider_class, config):
 
     background = UnitreeGo2Bg(config=config)
 
-    mock_provider_class.assert_called_once_with(channel="", timeout=1.0)
+    mock_provider_class.assert_called_once_with(
+        channel="", 
+        timeout=10.0,
+        state_topic="rt/sportmodestate"
+    )
     assert background.unitree_go2_provider is mock_provider_instance
     mock_provider_instance.start.assert_called_once()
 
 
 @patch("backgrounds.plugins.unitree_go2_bg.UnitreeGo2Provider")
 def test_background_initialization_with_ethernet(mock_provider_class, config_with_ethernet):
-    """Background passes unitree_ethernet and timeout to Provider."""
+    """Background passes unitree_ethernet, timeout, and state_topic to Provider."""
     mock_provider_instance = MagicMock()
     mock_provider_class.return_value = mock_provider_instance
 
     background = UnitreeGo2Bg(config=config_with_ethernet)
 
-    mock_provider_class.assert_called_once_with(channel="eth0", timeout=10.0)
+    mock_provider_class.assert_called_once_with(
+        channel="eth0", 
+        timeout=10.0,
+        state_topic="rt/sportmodestate"
+    )
+    assert background.unitree_go2_provider is mock_provider_instance
+    mock_provider_instance.start.assert_called_once()
+
+
+@patch("backgrounds.plugins.unitree_go2_bg.UnitreeGo2Provider")
+def test_background_initialization_with_custom_topic(mock_provider_class, config_custom_topic):
+    """Background passes custom state_topic to Provider."""
+    mock_provider_instance = MagicMock()
+    mock_provider_class.return_value = mock_provider_instance
+
+    background = UnitreeGo2Bg(config=config_custom_topic)
+
+    mock_provider_class.assert_called_once_with(
+        channel="eth0", 
+        timeout=10.0,
+        state_topic="rt/custom_state"
+    )
     assert background.unitree_go2_provider is mock_provider_instance
     mock_provider_instance.start.assert_called_once()
 
@@ -86,7 +127,11 @@ def test_background_initialization_strips_ethernet_whitespace(mock_provider_clas
 
     UnitreeGo2Bg(config=cfg)
 
-    mock_provider_class.assert_called_once_with(channel="eth0", timeout=2.0)
+    mock_provider_class.assert_called_once_with(
+        channel="eth0", 
+        timeout=2.0,
+        state_topic="rt/sportmodestate"
+    )
 
 
 # ----- Name -----
@@ -111,6 +156,7 @@ def test_background_config_access(mock_provider_class, config_with_ethernet):
     assert background.config is config_with_ethernet
     assert background.config.unitree_ethernet == "eth0"
     assert background.config.timeout == 10.0
+    assert background.config.state_topic == "rt/sportmodestate"
 
 
 # ----- run() -----
