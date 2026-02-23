@@ -25,14 +25,20 @@ class UnitreeGo2BgConfig(BackgroundConfig):
         Unitree Go2 Ethernet channel (e.g. "eth0"). Passed to UnitreeGo2Provider for DDS.
     timeout : float
         RPC timeout in seconds for SportClient (default 10.0). Passed to UnitreeGo2Provider.
+    state_topic : str
+        DDS topic name for SportModeState data (default "rt/sportmodestate").
     """
 
     unitree_ethernet: Optional[str] = Field(
         default=None, description="Unitree Go2 Ethernet channel"
     )
     timeout: float = Field(
-        default=1.0,
+        default=10.0,
         description="RPC timeout in seconds for SportClient",
+    )
+    state_topic: str = Field(
+        default="rt/sportmodestate",
+        description="DDS topic name for SportModeState",
     )
 
 
@@ -49,11 +55,18 @@ class UnitreeGo2Bg(Background[UnitreeGo2BgConfig]):
 
         channel = (self.config.unitree_ethernet or "").strip()
         timeout = self.config.timeout
+        state_topic = self.config.state_topic
+        
         try:
-            self.unitree_go2_provider = UnitreeGo2Provider(channel=channel, timeout=timeout)
+            self.unitree_go2_provider = UnitreeGo2Provider(
+                channel=channel, 
+                timeout=timeout,
+                state_topic=state_topic
+            )
             self.unitree_go2_provider.start()
             logging.info(
-                "Unitree Go2 Provider initialized and started in background"
+                "Unitree Go2 Provider initialized and started in background "
+                f"(channel={channel!r}, timeout={timeout}, state_topic={state_topic!r})"
             )
         except Exception as e:
             logging.error(f"UnitreeGo2Bg: Failed to init UnitreeGo2Provider: {e}")
