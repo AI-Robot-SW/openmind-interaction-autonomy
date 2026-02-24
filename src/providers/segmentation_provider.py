@@ -219,7 +219,7 @@ class SegmentationProvider:
                     raise ValueError("engine_path is empty. Provide cfg.engine_path")
                 self._engine = TRTEngine(self.cfg.engine_path)
 
-    def _get_frame_bgr(self) -> Optional[np.ndarray]:
+    def _get_frame_bgr(self) -> tuple[Optional[np.ndarray], Optional[float]]:
         """
         RealSenseCameraProvider.data schema:
         {
@@ -231,19 +231,24 @@ class SegmentationProvider:
         """
         d = getattr(self.cam, "data", None)
         if not d:
-            return None
+            return None, None
 
         rgb = d.get("rgb")
         if not rgb:
-            return None
+            return None, None
 
         frame = rgb.get("image")
         if frame is None:
-            return None
+            return None, None
 
         if not isinstance(frame, np.ndarray) or frame.ndim != 3 or frame.shape[2] != 3:
-            return None
-        return frame
+            return None, None
+        ts = d.get("timestamp")
+        try:
+            ts = float(ts) if ts is not None else None
+        except Exception:
+            ts = None
+        return frame, ts
 
     def _build_semantic_map(self, class_map: np.ndarray) -> np.ndarray:
         """
@@ -345,7 +350,7 @@ class SegmentationProvider:
         - If camera frame exists: run segmentation and update _data/_segmented_image/_classes
         - If no frame: still update _data with placeholder keys (for tests / contract)
         """
-        frame = self._get_frame_bgr()
+        frame, frame_ts = self._get_frame_bgr()
 
         # always set timestamp for heartbeat / tests
         ts = float(time.time())
@@ -367,7 +372,9 @@ class SegmentationProvider:
         self._segmented_image = out.get("segmented_image")
         self._classes = out.get("classes")
 
-        if "timestamp" not in out:
+        if frame_ts is not None:
+            out["timestamp"] = frame_ts
+        elif "timestamp" not in out:
             out["timestamp"] = ts
 
         self._set_data(out)
