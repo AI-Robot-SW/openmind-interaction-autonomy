@@ -1,0 +1,635 @@
+<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36" version="26.0.0">
+  <diagram id="SqD_Speaker_v2" name="SqD_Speaker_v2">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ============================================================ -->
+        <!-- Swimlane Groups                                              -->
+        <!-- ============================================================ -->
+        <mxCell id="g1" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="TTS Service" vertex="1">
+          <mxGeometry height="4750" width="445" x="20" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="g2" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="Speaker Service" vertex="1">
+          <mxGeometry height="4750" width="474" x="712" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="g3" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="Hardware" vertex="1">
+          <mxGeometry height="4750" width="160" x="1442" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="g4" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="Action" vertex="1">
+          <mxGeometry height="4750" width="160" x="1662" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="g5" parent="1" style="whiteSpace=wrap;strokeWidth=2;verticalAlign=top;" value="External" vertex="1">
+          <mxGeometry height="4750" width="179" x="1919" y="20" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Lifelines                                                    -->
+        <!-- ============================================================ -->
+        <mxCell id="ll-ttsbg" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="TTSBg" vertex="1">
+          <mxGeometry height="4725" width="150" x="25" y="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-ttsprov" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="TTSProvider" vertex="1">
+          <mxGeometry height="4725" width="150" x="310" y="45" as="geometry" />
+        </mxCell>
+        <!-- TTSProvider Activation Bars -->
+        <mxCell id="ab-tp1" parent="ll-ttsprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="359" width="10" x="70" y="276" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-tp2" parent="ll-ttsprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="214" width="10" x="70" y="663" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-tp3" parent="ll-ttsprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="151" width="10" x="70" y="1757" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-tp4" parent="ll-ttsprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="265" width="10" x="70" y="2349" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-tp5" parent="ll-ttsprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="945" width="10" x="70" y="2814" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-speakerbg" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="SpeakerBg" vertex="1">
+          <mxGeometry height="4725" width="150" x="717" y="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-speakerprov" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="SpeakerProvider" vertex="1">
+          <mxGeometry height="4725" width="150" x="1031" y="45" as="geometry" />
+        </mxCell>
+        <!-- SpeakerProvider Activation Bars -->
+        <mxCell id="ab-skp1" parent="ll-speakerprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="252" width="10" x="70" y="1015" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-skp2" parent="ll-speakerprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="301" width="10" x="70" y="1305" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-skp3" parent="ll-speakerprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="161" width="10" x="70" y="2128" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-skp4" parent="ll-speakerprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="155" width="10" x="70" y="3507" as="geometry" />
+        </mxCell>
+        <mxCell id="ab-skp5" parent="ll-speakerprov" style="points=[];perimeter=orthogonalPerimeter;outlineConnect=0;targetShapes=umlLifeline;portConstraint=eastwest;" value="" vertex="1">
+          <mxGeometry height="332" width="10" x="70" y="3889" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-speaker" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="Speaker" vertex="1">
+          <mxGeometry height="4725" width="150" x="1447" y="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-ttsconn" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="TTSConnector" vertex="1">
+          <mxGeometry height="4725" width="150" x="1667" y="45" as="geometry" />
+        </mxCell>
+
+        <mxCell id="ll-naver" parent="1" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;container=1;dropTarget=0;collapsible=0;recursiveResize=0;outlineConnect=0;portConstraint=eastwest;newEdgeStyle={&quot;edgeStyle&quot;:&quot;elbowEdgeStyle&quot;,&quot;elbow&quot;:&quot;vertical&quot;,&quot;curved&quot;:0,&quot;rounded&quot;:0};size=65;" value="Naver Clova TTS API" vertex="1">
+          <mxGeometry height="4725" width="169" x="1924" y="45" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Phase Labels                                                 -->
+        <!-- ============================================================ -->
+        <mxCell id="ph1" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Phase 1: TTSProvider Initialization (Naver Clova)" vertex="1">
+          <mxGeometry height="49" width="1959" x="75" y="149" as="geometry" />
+        </mxCell>
+        <mxCell id="ph2" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Phase 2: SpeakerProvider Initialization" vertex="1">
+          <mxGeometry height="49" width="1959" x="75" y="945" as="geometry" />
+        </mxCell>
+        <mxCell id="ph3" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;strokeWidth=2;" value="Phase 3: Provider Wiring — TTS↔Speaker Callback (NEW)" vertex="1">
+          <mxGeometry height="49" width="1959" x="75" y="1706" as="geometry" />
+        </mxCell>
+        <mxCell id="ph4" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Phase 4: TTSConnector TTS Request (via ActionConnector)" vertex="1">
+          <mxGeometry height="49" width="1959" x="75" y="2063" as="geometry" />
+        </mxCell>
+        <mxCell id="ph5" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Phase 5: TTS Processing &amp; Audio Output" vertex="1">
+          <mxGeometry height="49" width="1959" x="75" y="2719" as="geometry" />
+        </mxCell>
+        <mxCell id="ph5-loop1" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Loop: TTS Processing (Background Thread)" vertex="1">
+          <mxGeometry height="49" width="337" x="410" y="2789" as="geometry" />
+        </mxCell>
+        <mxCell id="ph5-loop2" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;strokeWidth=2;" value="Loop: _playback_loop (Thread + Blocking Write)" vertex="1">
+          <mxGeometry height="49" width="346" x="1131" y="3864" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Loop Frames                                                  -->
+        <!-- ============================================================ -->
+        <!-- Processing loop frame (Steps 29-38) -->
+        <mxCell id="loop-frame1" parent="1" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=0" value="" vertex="1">
+          <mxGeometry height="1041" width="1761" x="283" y="2769" as="geometry" />
+        </mxCell>
+        <mxCell id="loop-label1" parent="loop-frame1" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" value="" vertex="1">
+          <mxGeometry height="20" width="1761" as="geometry" />
+        </mxCell>
+
+        <!-- Playback loop frame (Steps 39-43) -->
+        <mxCell id="loop-frame2" parent="1" style="shape=umlFrame;dashed=1;pointerEvents=0;dropTarget=0;strokeColor=#B3B3B3;height=20;width=0" value="" vertex="1">
+          <mxGeometry height="416" width="522" x="1011" y="3844" as="geometry" />
+        </mxCell>
+        <mxCell id="loop-label2" parent="loop-frame2" style="text;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;" value="" vertex="1">
+          <mxGeometry height="20" width="522" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- PHASE 1: TTSProvider Initialization (Steps 1-9)              -->
+        <!-- ============================================================ -->
+
+        <!-- Step 1: TTSBg -> TTSProvider: TTSProvider(config) -->
+        <mxCell id="ar-1" edge="1" parent="1" source="ll-ttsbg" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" target="ab-tp1" value="TTSProvider(&#xa;backend=NAVER_CLOVA,&#xa;naver_client_id=env,&#xa;naver_client_secret=env,&#xa;speaker=&quot;nara&quot;,&#xa;output_format=&quot;wav&quot;)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="321" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-1" parent="ar-1" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="1" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-150" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 2: TTSProvider self: Load credentials -->
+        <mxCell id="ar-2" edge="1" parent="1" source="ab-tp1" style="curved=1;endArrow=block;rounded=0;" target="ab-tp1" value="Load credentials from&#xa;environment variables">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="388" /><mxPoint x="440" y="418" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-2" parent="ar-2" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="2" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 3: TTSProvider self: Set Naver config -->
+        <mxCell id="ar-3" edge="1" parent="1" source="ab-tp1" style="curved=1;endArrow=block;rounded=0;" target="ab-tp1" value="Set Naver Clova config(&#xa;speaker, volume, speed,&#xa;pitch, emotion, sampling_rate)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="504" /><mxPoint x="440" y="534" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-3" parent="ar-3" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="3" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 4: TTSProvider self: Init queue -->
+        <mxCell id="ar-4" edge="1" parent="1" source="ab-tp1" style="curved=1;endArrow=block;rounded=0;" target="ab-tp1" value="Initialize pending_requests queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="582" /><mxPoint x="440" y="612" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-4" parent="ar-4" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="4" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 5: TTSProvider -> TTSBg return -->
+        <mxCell id="ar-5" edge="1" parent="1" source="ab-tp1" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-ttsbg" value="TTSProvider instance created">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="660" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-5" parent="ar-5" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="5" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="134" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 6: TTSBg -> TTSProvider: start() -->
+        <mxCell id="ar-6" edge="1" parent="1" source="ll-ttsbg" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" target="ab-tp2" value="start()">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="708" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-6" parent="ar-6" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="6" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-150" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 7: TTSProvider self: Start _processing_loop -->
+        <mxCell id="ar-7" edge="1" parent="1" source="ab-tp2" style="curved=1;endArrow=block;rounded=0;" target="ab-tp2" value="Start _processing_loop thread">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="756" /><mxPoint x="440" y="786" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-7" parent="ar-7" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="7" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 8: TTSProvider self: Set state = IDLE -->
+        <mxCell id="ar-8" edge="1" parent="1" source="ab-tp2" style="curved=1;endArrow=block;rounded=0;" target="ab-tp2" value="Set state = IDLE">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="834" /><mxPoint x="440" y="864" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-8" parent="ar-8" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="8" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 9: TTSProvider -> TTSBg return -->
+        <mxCell id="ar-9" edge="1" parent="1" source="ab-tp2" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-ttsbg" value="TTSProvider started">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="912" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-9" parent="ar-9" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="9" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="134" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- PHASE 2: SpeakerProvider Initialization (Steps 10-18)        -->
+        <!-- ============================================================ -->
+
+        <!-- Step 10: SpeakerBg -> SpeakerProvider: constructor -->
+        <mxCell id="ar-10" edge="1" parent="1" source="ll-speakerbg" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" target="ab-skp1" value="SpeakerProvider(&#xa;sample_rate=24000,&#xa;channels=1)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="958" y="1060" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-10" parent="ar-10" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="10" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-164.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 11: SpeakerProvider self: pyaudio.PyAudio() -->
+        <mxCell id="ar-11" edge="1" parent="1" source="ab-skp1" style="curved=1;endArrow=block;rounded=0;" target="ab-skp1" value="pyaudio.PyAudio()&#xa;Create audio interface">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="1127" /><mxPoint x="1161" y="1157" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-11" parent="ar-11" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="11" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 12: SpeakerProvider self: Initialize queue -->
+        <mxCell id="ar-12" edge="1" parent="1" source="ab-skp1" style="curved=1;endArrow=block;rounded=0;" target="ab-skp1" value="Initialize audio output queue&#xa;(thread-safe queue)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="1224" /><mxPoint x="1161" y="1254" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-12" parent="ar-12" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="12" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 13: SpeakerProvider -> SpeakerBg return -->
+        <mxCell id="ar-13" edge="1" parent="1" source="ab-skp1" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-speakerbg" value="SpeakerProvider instance created">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="959" y="1302" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-13" parent="ar-13" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="13" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="148.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 14: SpeakerBg -> SpeakerProvider: start() -->
+        <mxCell id="ar-14" edge="1" parent="1" source="ll-speakerbg" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" target="ab-skp2" value="start()">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="958" y="1350" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-14" parent="ar-14" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="14" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-164.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 15: SpeakerProvider -> Speaker: pyaudio.open (RED: NO stream_callback) -->
+        <mxCell id="ar-15" edge="1" parent="1" source="ab-skp2" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ll-speaker" value="pyaudio.open(&#xa;format=paInt16,&#xa;channels=1,&#xa;rate=24000,&#xa;output=True)&#xa;⚠ NO stream_callback">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1325" y="1448" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-15" parent="ar-15" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="15" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-213.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 16: Speaker -> SpeakerProvider return -->
+        <mxCell id="ar-16" edge="1" parent="1" source="ll-speaker" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ab-skp2" value="Audio output stream ready">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1328" y="1496" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-16" parent="ar-16" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="16" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="199.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 17: SpeakerProvider self: Start _playback_loop (RED: thread+blocking) -->
+        <mxCell id="ar-17" edge="1" parent="1" source="ab-skp2" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-skp2" value="Start _playback_loop() thread&#xa;(thread + blocking stream.write)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="1563" /><mxPoint x="1161" y="1593" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-17" parent="ar-17" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="17" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 18: SpeakerProvider -> SpeakerBg return -->
+        <mxCell id="ar-18" edge="1" parent="1" source="ab-skp2" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-speakerbg" value="Speaker stream started">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="959" y="1641" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-18" parent="ar-18" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="18" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="148.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- PHASE 3: Provider Wiring (Steps 19-21) — NEW                 -->
+        <!-- ============================================================ -->
+
+        <!-- Step 19: TTSBg -> TTSProvider: register_audio_callback (RED) -->
+        <mxCell id="ar-19" edge="1" parent="1" source="ll-ttsbg" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ab-tp3" value="register_audio_callback(&#xa;speaker_provider.queue_audio)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="1802" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-19" parent="ar-19" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="19" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-150" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 20: TTSProvider self: Add callback (RED) -->
+        <mxCell id="ar-20" edge="1" parent="1" source="ab-tp3" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-tp3" value="Add callback to&#xa;_audio_callbacks list">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="1869" /><mxPoint x="440" y="1899" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-20" parent="ar-20" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="20" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 21: TTSProvider -> TTSBg return (RED) -->
+        <mxCell id="ar-21" edge="1" parent="1" source="ab-tp3" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;strokeColor=#CC0000;" target="ll-ttsbg" value="Audio callback registered">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="252" y="1943" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-21" parent="ar-21" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="21" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="134" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Phase 3 Note: Loose coupling -->
+        <mxCell id="note-wiring" parent="1" style="fillColor=#FFE6E6;strokeColor=#CC0000;rounded=1;whiteSpace=wrap;" value="Loose coupling via callback pattern:&#xa;TTSBg wires tts.register_audio_callback(&#xa;  speaker_provider.queue_audio&#xa;)&#xa;→ TTS output automatically routed to speaker" vertex="1">
+          <mxGeometry height="95" width="320" x="420" y="1964" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- PHASE 4: TTSConnector TTS Request (Steps 22-28) — MODIFIED   -->
+        <!-- ============================================================ -->
+
+        <!-- Step 22: TTSConnector -> SpeakerProvider: stop_playback (RED) -->
+        <mxCell id="ar-22" edge="1" parent="1" source="ll-ttsconn" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ab-skp3" value="stop_playback()&#xa;(interrupt=True: stop current first)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1424" y="2173" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-22" parent="ar-22" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="22" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="318" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 23: SpeakerProvider self: stop + clear + notify (RED) -->
+        <mxCell id="ar-23" edge="1" parent="1" source="ab-skp3" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-skp3" value="_should_stop=True&#xa;clear_queue()&#xa;_notify_playback_state(&quot;stopped&quot;)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="2240" /><mxPoint x="1161" y="2270" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-23" parent="ar-23" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="23" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 24: SpeakerProvider -> TTSConnector return (RED) -->
+        <mxCell id="ar-24" edge="1" parent="1" source="ab-skp3" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;strokeColor=#CC0000;" target="ll-ttsconn" value="Playback stopped">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1424" y="2324" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-24" parent="ar-24" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="24" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-318" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 25: TTSConnector -> TTSProvider: add_pending_message (RED) -->
+        <mxCell id="ar-25" edge="1" parent="1" source="ll-ttsconn" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ab-tp4" value="add_pending_message(text)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1075" y="2394" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-25" parent="ar-25" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="25" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="672" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 26: TTSProvider self: _create_naver_clova_message -->
+        <mxCell id="ar-26" edge="1" parent="1" source="ab-tp4" style="curved=1;endArrow=block;rounded=0;" target="ab-tp4" value="_create_naver_clova_message(text)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="2461" /><mxPoint x="440" y="2491" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-26" parent="ar-26" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="26" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Create request note -->
+        <mxCell id="note-create-req" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Create request:&#xa;{speaker: &quot;nara&quot;,&#xa;text: &quot;...&quot;,&#xa;format: &quot;wav&quot;,&#xa;sampling-rate: 24000,&#xa;emotion: 0}" vertex="1">
+          <mxGeometry height="120" width="182" x="420" y="2500" as="geometry" />
+        </mxCell>
+
+        <!-- Step 27: TTSProvider self: put message in queue -->
+        <mxCell id="ar-27" edge="1" parent="1" source="ab-tp4" style="curved=1;endArrow=block;rounded=0;" target="ab-tp4" value="_pending_requests.put(message)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="2571" /><mxPoint x="440" y="2601" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-27" parent="ar-27" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="27" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 28: TTSProvider -> TTSConnector return -->
+        <mxCell id="ar-28" edge="1" parent="1" source="ab-tp4" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-ttsconn" value="Message queued">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1074" y="2649" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-28" parent="ar-28" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="28" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-684" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- PHASE 5: TTS Processing & Audio Output (Steps 29-43)         -->
+        <!-- ============================================================ -->
+
+        <!-- Step 29: TTSProvider self: _processing_loop get next -->
+        <mxCell id="ar-29" edge="1" parent="1" source="ab-tp5" style="curved=1;endArrow=block;rounded=0;" target="ab-tp5" value="_processing_loop()&#xa;Get next pending message">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="2859" /><mxPoint x="440" y="2889" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-29" parent="ar-29" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="29" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 30: TTSProvider self: Set state = PROCESSING -->
+        <mxCell id="ar-30" edge="1" parent="1" source="ab-tp5" style="curved=1;endArrow=block;rounded=0;" target="ab-tp5" value="Set state = PROCESSING">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="2937" /><mxPoint x="440" y="2967" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-30" parent="ar-30" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="30" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 31: TTSProvider -> Naver Clova: HTTP POST -->
+        <mxCell id="ar-31" edge="1" parent="1" source="ab-tp5" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;" target="ll-naver" value="HTTP POST&#xa;https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1207" y="3037" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-31" parent="ar-31" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="31" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-817.25" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Headers note -->
+        <mxCell id="note-headers" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Headers:&#xa;X-NCP-APIGW-API-KEY-ID&#xa;X-NCP-APIGW-API-KEY&#xa;Content-Type: application/x-www-form-urlencoded" vertex="1">
+          <mxGeometry height="104" width="1674" x="360" y="3057" as="geometry" />
+        </mxCell>
+
+        <!-- Body note -->
+        <mxCell id="note-body" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Body (form-urlencoded):&#xa;speaker=nara&amp;text=...&amp;format=wav&#xa;&amp;sampling-rate=24000&amp;emotion=0" vertex="1">
+          <mxGeometry height="86" width="1674" x="360" y="3161" as="geometry" />
+        </mxCell>
+
+        <!-- Step 32: Naver Clova -> TTSProvider: Response -->
+        <mxCell id="ar-32" edge="1" parent="1" source="ll-naver" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ab-tp5" value="Response: Binary audio data&#xa;(WAV format, 24kHz)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1210" y="3297" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-32" parent="ar-32" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="32" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="803.25" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 33: TTSProvider self: _extract_pcm_from_wav -->
+        <mxCell id="ar-33" edge="1" parent="1" source="ab-tp5" style="curved=1;endArrow=block;rounded=0;" target="ab-tp5" value="_extract_pcm_from_wav()&#xa;Decode WAV, extract PCM16">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="3364" /><mxPoint x="440" y="3394" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-33" parent="ar-33" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="33" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 34: TTSProvider self: Set state = SPEAKING -->
+        <mxCell id="ar-34" edge="1" parent="1" source="ab-tp5" style="curved=1;endArrow=block;rounded=0;" target="ab-tp5" value="Set state = SPEAKING">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="3442" /><mxPoint x="440" y="3472" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-34" parent="ar-34" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="34" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 35: TTSProvider -> SpeakerProvider: callback (RED) -->
+        <mxCell id="ar-35" edge="1" parent="1" source="ll-ttsprov" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ab-skp4" value="callback(audio_data)&#xa;via _audio_callbacks list">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="754" y="3552" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-35" parent="ar-35" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="35" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-368" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 36: SpeakerProvider self: queue_audio -->
+        <mxCell id="ar-36" edge="1" parent="1" source="ab-skp4" style="curved=1;endArrow=block;rounded=0;" target="ab-skp4" value="queue_audio()&#xa;Add audio_data to output queue">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="3619" /><mxPoint x="1161" y="3649" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-36" parent="ar-36" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="36" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 37: SpeakerProvider -> TTSProvider return -->
+        <mxCell id="ar-37" edge="1" parent="1" source="ab-skp4" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ll-ttsprov" value="Audio queued">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="757" y="3697" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-37" parent="ar-37" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="37" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="354" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 38: TTSProvider self: Set state = IDLE -->
+        <mxCell id="ar-38" edge="1" parent="1" source="ab-tp5" style="curved=1;endArrow=block;rounded=0;" target="ab-tp5" value="Set state = IDLE">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="440" y="3764" /><mxPoint x="440" y="3794" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-38" parent="ar-38" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="38" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- ---- Playback Loop (Steps 39-43) ---- -->
+
+        <!-- Step 39: SpeakerProvider self: _playback_loop get audio (RED) -->
+        <mxCell id="ar-39" edge="1" parent="1" source="ab-skp5" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-skp5" value="_playback_loop() get audio&#xa;_should_stop = False (reset for new audio)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="3934" /><mxPoint x="1161" y="3964" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-39" parent="ar-39" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="39" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 40: SpeakerProvider self: _notify_playback_state("playing") (RED) -->
+        <mxCell id="ar-40" edge="1" parent="1" source="ab-skp5" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-skp5" value="_notify_playback_state(&quot;playing&quot;)&#xa;→ Echo prevention: STT paused">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="4011" /><mxPoint x="1161" y="4041" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-40" parent="ar-40" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="40" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 41: SpeakerProvider -> Speaker: stream.write (RED) -->
+        <mxCell id="ar-41" edge="1" parent="1" source="ab-skp5" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;endArrow=block;strokeColor=#CC0000;" target="ll-speaker" value="stream.write(audio_chunk)&#xa;Blocking write (PCM16 → HW)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1325" y="4111" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-41" parent="ar-41" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="41" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-213.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 42: Speaker -> SpeakerProvider return -->
+        <mxCell id="ar-42" edge="1" parent="1" source="ll-speaker" style="verticalAlign=bottom;edgeStyle=elbowEdgeStyle;elbow=vertical;curved=0;rounded=0;dashed=1;dashPattern=2 3;endArrow=block;" target="ab-skp5" value="Audio chunk written">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1328" y="4159" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-42" parent="ar-42" style="ellipse;aspect=fixed;fillColor=#000000;align=center;fontColor=#FFFFFF;" value="42" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="199.5" y="-7" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- Step 43: SpeakerProvider self: _notify_playback_state("completed") (RED) -->
+        <mxCell id="ar-43" edge="1" parent="1" source="ab-skp5" style="curved=1;endArrow=block;rounded=0;strokeColor=#CC0000;" target="ab-skp5" value="_notify_playback_state(&quot;completed&quot;)&#xa;→ Echo prevention: STT resumed">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points"><mxPoint x="1161" y="4226" /><mxPoint x="1161" y="4256" /></Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sn-43" parent="ar-43" style="ellipse;aspect=fixed;fillColor=#CC0000;align=center;fontColor=#FFFFFF;" value="43" vertex="1">
+          <mxGeometry height="14" relative="1" width="14" as="geometry"><mxPoint x="-57" y="-22" as="offset" /></mxGeometry>
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Notes                                                        -->
+        <!-- ============================================================ -->
+
+        <!-- Speaker hardware note -->
+        <mxCell id="note-hw" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Speaker hardware converts&#xa;PCM to analog and outputs sound" vertex="1">
+          <mxGeometry height="67" width="266" x="1389" y="4306" as="geometry" />
+        </mxCell>
+
+        <!-- Echo prevention note -->
+        <mxCell id="note-echo" parent="1" style="fillColor=#E6F3FF;strokeColor=#0066CC;rounded=1;whiteSpace=wrap;" value="Echo Prevention (wired in STTBg):&#xa;Step 40 &quot;playing&quot; → STTProvider.pause()&#xa;Step 43 &quot;completed&quot; → STTProvider.resume()&#xa;→ Prevents self-voice recognition during playback" vertex="1">
+          <mxGeometry height="80" width="350" x="1131" y="4306" as="geometry" />
+        </mxCell>
+
+        <!-- Final note -->
+        <mxCell id="note-final" parent="1" style="fillColor=#ffff88;strokeColor=#9E916F;" value="Audio playback complete&#xa;TTSProvider state = IDLE" vertex="1">
+          <mxGeometry height="67" width="263" x="100" y="4400" as="geometry" />
+        </mxCell>
+
+        <!-- ============================================================ -->
+        <!-- Change Legend                                                -->
+        <!-- ============================================================ -->
+        <mxCell id="legend" parent="1" style="fillColor=#FFE6E6;strokeColor=#CC0000;rounded=1;whiteSpace=wrap;" value="Red = Changed from original SqD_Speaker&#xa;&#xa;Phase 2: Step 15, 17 — Thread + blocking write&#xa;  (was: callback-based stream_callback=_write_buffer)&#xa;Phase 3: Steps 19-21 — Provider wiring via callback (NEW)&#xa;  (was: direct TTSProvider→SpeakerProvider() singleton)&#xa;Phase 4: Steps 22-25 — TTSConnector as intermediary (NEW)&#xa;  (was: SpeakAction calls TTSProvider directly)&#xa;Phase 5: Step 35 — callback(audio_data) via _audio_callbacks&#xa;  (was: TTSProvider calls SpeakerProvider().queue_audio directly)&#xa;Phase 5: Steps 39-43 — _playback_loop thread + blocking write&#xa;  + _should_stop reset + _notify_playback_state for echo prevention&#xa;  (was: _write_buffer callback-based output)&#xa;&#xa;Blue = Echo prevention (STTBg wiring, not shown in this diagram)" vertex="1">
+          <mxGeometry height="260" width="450" x="50" y="4500" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

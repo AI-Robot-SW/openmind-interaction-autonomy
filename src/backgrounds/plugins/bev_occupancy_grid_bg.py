@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from pydantic import Field
@@ -104,3 +105,12 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
             f"(res: {res}, size: ({width},{height}), origin: ({origin_x},{origin_y}), "
             f"dx: {dx}, dy: {dy})"
         )
+
+    def run(self) -> None:
+        """
+        Background process loop.
+
+        This Background only keeps the BEVOccupancyGridProvider running; BEV
+        updates are handled inside the Provider. No additional work is done here.
+        """
+        time.sleep(60)

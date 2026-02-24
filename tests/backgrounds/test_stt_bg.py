@@ -98,19 +98,31 @@ class TestSTTBgInitialization:
         assert background.stt_provider is mock_stt_instance
         mock_stt_instance.start.assert_called_once()
 
-        # Verify audio callback was registered
-        mock_audio_instance.register_audio_callback.assert_called_once_with(
-            mock_stt_instance.send_audio
+        # Verify audio provider was attached to STT provider
+        mock_stt_instance.attach_audio_provider.assert_called_once_with(
+            mock_audio_instance
         )
 
-    def test_background_name(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_background_name(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test that background has correct name."""
+        mock_stt_provider_class.return_value = MagicMock()
+
         background = STTBg(config=config)
 
         assert background.name == "STTBg"
 
-    def test_background_config_access(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_background_config_access(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test that background has access to config."""
+        mock_stt_provider_class.return_value = MagicMock()
+
         background = STTBg(config=config)
 
         assert background.config == config
@@ -121,16 +133,30 @@ class TestSTTBgInitialization:
 class TestSTTBgHealthCheck:
     """Test STTBg health check functionality."""
 
-    def test_health_check_returns_true(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_health_check_returns_true(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test health check returns True when provider is healthy."""
+        mock_stt_instance = MagicMock()
+        mock_stt_instance.running = True
+        mock_stt_provider_class.return_value = mock_stt_instance
+
         background = STTBg(config=config)
 
         result = background._health_check()
 
         assert result is True
 
-    def test_consecutive_failures_tracking(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_consecutive_failures_tracking(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test consecutive failures are tracked."""
+        mock_stt_provider_class.return_value = MagicMock()
+
         background = STTBg(config=config)
 
         assert background._consecutive_failures == 0
@@ -140,16 +166,30 @@ class TestSTTBgHealthCheck:
 class TestSTTBgReconnect:
     """Test STTBg reconnect functionality."""
 
-    def test_reconnect_increments_attempts(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_reconnect_increments_attempts(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test reconnect increments attempt counter."""
+        mock_stt_instance = MagicMock()
+        mock_stt_instance.running = False
+        mock_stt_provider_class.return_value = mock_stt_instance
+
         background = STTBg(config=config)
 
         background._reconnect()
 
         assert background._reconnect_attempts == 1
 
-    def test_reconnect_max_attempts(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_reconnect_max_attempts(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test reconnect fails after max attempts."""
+        mock_stt_provider_class.return_value = MagicMock()
+
         background = STTBg(config=config)
         background._reconnect_attempts = config.max_reconnect_attempts
 
@@ -161,8 +201,14 @@ class TestSTTBgReconnect:
 class TestSTTBgRun:
     """Test STTBg run method."""
 
-    def test_run_respects_health_check_interval(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_run_respects_health_check_interval(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test run method respects health check interval."""
+        mock_stt_provider_class.return_value = MagicMock()
+
         background = STTBg(config=config)
         background._last_health_check = time.time()
 
@@ -172,8 +218,16 @@ class TestSTTBgRun:
 
         assert elapsed >= 0.9
 
-    def test_run_performs_health_check_after_interval(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_run_performs_health_check_after_interval(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test run method performs health check after interval."""
+        mock_stt_instance = MagicMock()
+        mock_stt_instance.running = True
+        mock_stt_provider_class.return_value = mock_stt_instance
+
         background = STTBg(config=config)
         background._last_health_check = time.time() - 15.0
 
@@ -181,8 +235,16 @@ class TestSTTBgRun:
 
         assert time.time() - background._last_health_check < 2.0
 
-    def test_run_resets_failures_on_success(self, config):
+    @patch("backgrounds.plugins.stt_bg.AudioProvider")
+    @patch("backgrounds.plugins.stt_bg.STTProvider")
+    def test_run_resets_failures_on_success(
+        self, mock_stt_provider_class, mock_audio_provider_class, config
+    ):
         """Test run resets failure counters on successful health check."""
+        mock_stt_instance = MagicMock()
+        mock_stt_instance.running = True
+        mock_stt_provider_class.return_value = mock_stt_instance
+
         background = STTBg(config=config)
         background._consecutive_failures = 2
         background._reconnect_attempts = 1

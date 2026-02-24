@@ -23,7 +23,7 @@ from typing import Optional
 from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
-from ...providers.audio_provider import AudioProvider
+from providers.audio_provider import AudioProvider
 
 
 class AudioBgConfig(BackgroundConfig):
@@ -102,17 +102,17 @@ class AudioBg(Background[AudioBgConfig]):
         vad_enabled = config.vad_enabled
         vad_threshold = config.vad_threshold
 
-        # TODO: AudioProvider 초기화
-        # self.audio_provider = AudioProvider(
-        #     sample_rate=sample_rate,
-        #     chunk_size=chunk_size,
-        #     channels=channels,
-        #     device_id=device_id,
-        #     device_name=device_name,
-        #     vad_enabled=vad_enabled,
-        #     vad_threshold=vad_threshold,
-        # )
-        # self.audio_provider.start()
+        # AudioProvider 초기화 + 스트림 시작
+        self.audio_provider = AudioProvider(
+            sample_rate=sample_rate,
+            chunk_size=chunk_size,
+            channels=channels,
+            device_id=device_id,
+            device_name=device_name,
+            vad_enabled=vad_enabled,
+            vad_threshold=vad_threshold,
+        )
+        self.audio_provider.start_stream()
 
         self._last_health_check = time.time()
         self._consecutive_failures = 0
@@ -132,19 +132,16 @@ class AudioBg(Background[AudioBgConfig]):
         bool
             Provider가 정상이면 True
         """
-        # TODO: 실제 상태 확인 로직
-        # return self.audio_provider.running
-        return True
+        return bool(self.audio_provider.running)
 
     def _restart_provider(self) -> None:
         """
         AudioProvider 재시작.
         """
         logging.warning("Restarting AudioProvider...")
-        # TODO: Provider 재시작
-        # self.audio_provider.stop()
-        # time.sleep(0.5)
-        # self.audio_provider.start()
+        self.audio_provider.stop()
+        time.sleep(0.5)
+        self.audio_provider.start_stream()
         self._consecutive_failures = 0
 
     def run(self) -> None:

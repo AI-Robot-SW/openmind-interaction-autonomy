@@ -49,7 +49,8 @@ def custom_config():
 class TestAudioProviderInitialization:
     """Test AudioProvider initialization."""
 
-    def test_default_initialization(self, default_config):
+    @patch("providers.audio_provider.SileroVAD")
+    def test_default_initialization(self, mock_vad_class, default_config):
         """Test AudioProvider initialization with default values."""
         provider = AudioProvider(**default_config)
 
@@ -153,14 +154,16 @@ class TestAudioProviderState:
 class TestAudioProviderLifecycle:
     """Test AudioProvider start/stop lifecycle."""
 
-    def test_start(self, default_config):
+    @patch("providers.audio_provider.pyaudio")
+    def test_start(self, mock_pa_module, default_config):
         """Test starting the provider."""
         provider = AudioProvider(**default_config)
         provider.start()
 
         assert provider.running is True
 
-    def test_start_already_running(self, default_config, caplog):
+    @patch("providers.audio_provider.pyaudio")
+    def test_start_already_running(self, mock_pa_module, default_config, caplog):
         """Test starting already running provider logs warning."""
         provider = AudioProvider(**default_config)
         provider.start()
@@ -168,7 +171,8 @@ class TestAudioProviderLifecycle:
 
         assert "already running" in caplog.text
 
-    def test_stop(self, default_config):
+    @patch("providers.audio_provider.pyaudio")
+    def test_stop(self, mock_pa_module, default_config):
         """Test stopping the provider."""
         provider = AudioProvider(**default_config)
         provider.start()
@@ -182,6 +186,87 @@ class TestAudioProviderLifecycle:
         provider.stop()
 
         assert "not running" in caplog.text
+
+
+class TestAudioProviderRemoteInput:
+    """Test AudioProvider remote_input mode."""
+
+    def test_remote_input_start_no_pyaudio(self):
+        """Test remote_input mode doesn't create PyAudio."""
+        provider = AudioProvider(
+            sample_rate=16000,
+            chunk_size=1024,
+            remote_input=True,
+            vad_enabled=False,
+        )
+        provider.start()
+
+        assert provider.running is True
+        assert provider._pa is None
+        assert provider._stream is None
+
+    def test_fill_buffer_remote(self):
+        """Test feeding audio via fill_buffer_remote."""
+        provider = AudioProvider(
+            sample_rate=16000,
+            chunk_size=1024,
+            remote_input=True,
+            vad_enabled=False,
+        )
+        provider.start()
+        audio_data = b"\x00" * 2048
+        provider.fill_buffer_remote(audio_data)
+
+        chunk = provider.get_audio_chunk()
+        assert chunk == audio_data
+
+    def test_fill_buffer_remote_ignored_when_not_remote(self):
+        """Test fill_buffer_remote is ignored in normal mode."""
+        provider = AudioProvider(
+            sample_rate=16000,
+            chunk_size=1024,
+            remote_input=False,
+            vad_enabled=False,
+        )
+        provider.fill_buffer_remote(b"\x00" * 2048)
+
+        chunk = provider.get_audio_chunk()
+        assert chunk is None
+
+
+class TestAudioProviderBuffer:
+    """Test AudioProvider buffer operations."""
+
+    def test_get_buffer_stats(self):
+        """Test buffer stats reporting."""
+        provider = AudioProvider(
+            sample_rate=16000,
+            chunk_size=1024,
+            remote_input=True,
+            vad_enabled=False,
+        )
+        stats = provider.get_buffer_stats()
+
+        assert "queued_chunks" in stats
+        assert "max_chunks" in stats
+        assert "drops" in stats
+        assert "approx_latency_ms" in stats
+        assert stats["queued_chunks"] == 0.0
+
+    def test_clear_audio_buffer(self):
+        """Test clearing audio buffer."""
+        provider = AudioProvider(
+            sample_rate=16000,
+            chunk_size=1024,
+            remote_input=True,
+            vad_enabled=False,
+        )
+        provider.start()
+        provider.fill_buffer_remote(b"\x00" * 2048)
+        provider.clear_audio_buffer()
+
+        chunk = provider.get_audio_chunk()
+        assert chunk is None
 
 
 class TestAudioProviderConfiguration:

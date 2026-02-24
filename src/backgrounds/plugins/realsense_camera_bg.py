@@ -1,3 +1,4 @@
+import time
 import logging
 from typing import Optional
 
@@ -7,49 +8,46 @@ from backgrounds.base import Background, BackgroundConfig
 from providers.realsense_camera_provider import RealSenseCameraProvider
 
 
-class RealSenseCameraConfig(BackgroundConfig):
-    """
-    Configuration for RealSense Camera Background.
-
-    Parameters
-    ----------
-    camera_index : Optional[int]
-        Camera index for RealSense device (default: 0).
-    """
-
-    camera_index: Optional[int] = Field(
-        default=0, description="Camera index for RealSense device"
-    )
+class RealSenseCameraBgConfig(BackgroundConfig):
+    camera_index: int = Field(default=0)
+    width: int = Field(default=640)
+    height: int = Field(default=480)
+    fps: int = Field(default=30)
+    align_depth_to_color: bool = Field(default=True)
 
 
-class RealSenseCameraBg(Background[RealSenseCameraConfig]):
+class RealSenseCameraBg(Background[RealSenseCameraBgConfig]):
     """
     RealSense Camera Background.
 
     Initializes and starts the RealSenseCameraProvider in the background.
     """
 
-    def __init__(self, config: RealSenseCameraConfig):
-        """
-        Initialize the RealSense Camera Background.
-
-        Parameters
-        ----------
-        config : RealSenseCameraConfig
-            Configuration for the background task.
-        """
+    def __init__(self, config: RealSenseCameraBgConfig):
         super().__init__(config)
 
-        camera_index = self.config.camera_index or 0
-
-        # Initialize Provider (singleton, so same instance shared)
         self.realsense_camera_provider = RealSenseCameraProvider(
-            camera_index=camera_index
+            camera_index=self.config.camera_index,
+            width=self.config.width,
+            height=self.config.height,
+            fps=self.config.fps,
+            align_depth_to_color=self.config.align_depth_to_color,
         )
 
-        # Start Provider
+    def run(self) -> None:
+        logging.info(
+            f"Starting RealSenseCameraProvider (index={self.config.camera_index}, "
+            f"{self.config.width}x{self.config.height}@{self.config.fps}, "
+            f"align={self.config.align_depth_to_color})"
+        )
+
         self.realsense_camera_provider.start()
 
-        logging.info(
-            f"RealSense Camera Provider initialized in background (camera_index: {camera_index})"
-        )
+        try:
+            # Background의 생명주기 유지를 위한 루프
+            while True:
+                time.sleep(1.0)
+        finally:
+            logging.info("Stopping RealSenseCameraProvider")
+            self.realsense_camera_provider.stop()
+

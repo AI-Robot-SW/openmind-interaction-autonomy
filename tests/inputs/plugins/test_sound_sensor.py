@@ -15,33 +15,22 @@ from inputs.plugins.sound_sensor import SoundSensor, SoundSensorConfig
 @pytest.fixture
 def config():
     """Configuration for SoundSensor."""
-    return SoundSensorConfig(
-        sample_rate=16000,
-        chunk_size=1024,
-        channels=1,
-        device_id=None,
-        device_name=None,
-        language="ko-KR",
-        vad_enabled=True,
-        vad_threshold=0.5,
-        buffer_duration_ms=200,
-    )
+    return SoundSensorConfig(language="korean")
 
 
 @pytest.fixture
-def config_custom():
-    """Custom configuration for SoundSensor."""
-    return SoundSensorConfig(
-        sample_rate=48000,
-        chunk_size=2048,
-        channels=2,
-        device_id=1,
-        device_name="Test Microphone",
-        language="en-US",
-        vad_enabled=False,
-        vad_threshold=0.7,
-        buffer_duration_ms=300,
-    )
+def config_english():
+    """English configuration for SoundSensor."""
+    return SoundSensorConfig(language="english")
+
+
+@pytest.fixture
+def mock_stt():
+    """Mock STTProvider for SoundSensor tests."""
+    with patch("inputs.plugins.sound_sensor.STTProvider") as mock_class:
+        mock_instance = MagicMock()
+        mock_class.return_value = mock_instance
+        yield mock_instance
 
 
 class TestSoundSensorConfig:
@@ -51,33 +40,19 @@ class TestSoundSensorConfig:
         """Test SoundSensorConfig default values."""
         config = SoundSensorConfig()
 
-        assert config.sample_rate == 16000
-        assert config.chunk_size == 1024
-        assert config.channels == 1
-        assert config.device_id is None
-        assert config.device_name is None
-        assert config.language == "ko-KR"
-        assert config.vad_enabled is True
-        assert config.vad_threshold == 0.5
-        assert config.buffer_duration_ms == 200
+        assert config.language == "korean"
 
     def test_config_custom_values(self):
         """Test SoundSensorConfig with custom values."""
-        config = SoundSensorConfig(
-            sample_rate=48000,
-            language="en-US",
-            vad_enabled=False,
-        )
+        config = SoundSensorConfig(language="english")
 
-        assert config.sample_rate == 48000
-        assert config.language == "en-US"
-        assert config.vad_enabled is False
+        assert config.language == "english"
 
 
 class TestSoundSensorInitialization:
     """Test SoundSensor initialization."""
 
-    def test_sensor_initialization(self, config):
+    def test_sensor_initialization(self, config, mock_stt):
         """Test SoundSensor initialization."""
         sensor = SoundSensor(config=config)
 
@@ -85,18 +60,26 @@ class TestSoundSensorInitialization:
         assert isinstance(sensor.message_buffer, Queue)
         assert sensor.messages == []
 
-    def test_sensor_config_access(self, config):
+    def test_sensor_registers_stt_callback(self, config, mock_stt):
+        """Test SoundSensor registers callback with STTProvider."""
+        sensor = SoundSensor(config=config)
+
+        mock_stt.register_result_callback.assert_called_once_with(
+            sensor._handle_stt_result
+        )
+
+    def test_sensor_config_access(self, config, mock_stt):
         """Test sensor has access to config."""
         sensor = SoundSensor(config=config)
 
         assert sensor.config == config
-        assert sensor.config.language == "ko-KR"
+        assert sensor.config.language == "korean"
 
 
 class TestSoundSensorSTTCallback:
     """Test SoundSensor STT callback handling."""
 
-    def test_handle_stt_result_valid(self, config):
+    def test_handle_stt_result_valid(self, config, mock_stt):
         """Test handling valid STT result."""
         sensor = SoundSensor(config=config)
 
@@ -105,7 +88,7 @@ class TestSoundSensorSTTCallback:
         assert sensor.message_buffer.qsize() == 1
         assert sensor.message_buffer.get() == "안녕하세요"
 
-    def test_handle_stt_result_empty(self, config):
+    def test_handle_stt_result_empty(self, config, mock_stt):
         """Test handling empty STT result."""
         sensor = SoundSensor(config=config)
 
@@ -113,7 +96,7 @@ class TestSoundSensorSTTCallback:
 
         assert sensor.message_buffer.qsize() == 0
 
-    def test_handle_stt_result_whitespace(self, config):
+    def test_handle_stt_result_whitespace(self, config, mock_stt):
         """Test handling whitespace-only STT result."""
         sensor = SoundSensor(config=config)
 
@@ -125,22 +108,20 @@ class TestSoundSensorSTTCallback:
 class TestSoundSensorPoll:
     """Test SoundSensor polling."""
 
-    @pytest.mark.asyncio
-    async def test_poll_with_message(self, config):
+    def test_poll_with_message(self, config, mock_stt):
         """Test polling when message is available."""
         sensor = SoundSensor(config=config)
         sensor.message_buffer.put("테스트 메시지")
 
-        result = await sensor._poll()
+        result = asyncio.run(sensor._poll())
 
         assert result == "테스트 메시지"
 
-    @pytest.mark.asyncio
-    async def test_poll_empty_buffer(self, config):
+    def test_poll_empty_buffer(self, config, mock_stt):
         """Test polling when buffer is empty."""
         sensor = SoundSensor(config=config)
 
-        result = await sensor._poll()
+        result = asyncio.run(sensor._poll())
 
         assert result is None
 
@@ -148,33 +129,30 @@ class TestSoundSensorPoll:
 class TestSoundSensorRawToText:
     """Test SoundSensor raw to text conversion."""
 
-    @pytest.mark.asyncio
-    async def test_raw_to_text_valid(self, config):
+    def test_raw_to_text_valid(self, config, mock_stt):
         """Test converting valid raw input to text."""
         sensor = SoundSensor(config=config)
 
-        message = await sensor._raw_to_text("테스트")
+        message = asyncio.run(sensor._raw_to_text("테스트"))
 
         assert message is not None
         assert message.message == "테스트"
         assert message.timestamp > 0
 
-    @pytest.mark.asyncio
-    async def test_raw_to_text_none(self, config):
+    def test_raw_to_text_none(self, config, mock_stt):
         """Test converting None input."""
         sensor = SoundSensor(config=config)
 
-        message = await sensor._raw_to_text(None)
+        message = asyncio.run(sensor._raw_to_text(None))
 
         assert message is None
 
-    @pytest.mark.asyncio
-    async def test_raw_to_text_accumulates(self, config):
+    def test_raw_to_text_accumulates(self, config, mock_stt):
         """Test that raw_to_text accumulates messages."""
         sensor = SoundSensor(config=config)
 
-        await sensor.raw_to_text("첫번째")
-        await sensor.raw_to_text("두번째")
+        asyncio.run(sensor.raw_to_text("첫번째"))
+        asyncio.run(sensor.raw_to_text("두번째"))
 
         assert len(sensor.messages) == 1
         assert "첫번째" in sensor.messages[0]
@@ -184,7 +162,7 @@ class TestSoundSensorRawToText:
 class TestSoundSensorFormattedBuffer:
     """Test SoundSensor formatted buffer output."""
 
-    def test_formatted_latest_buffer_empty(self, config):
+    def test_formatted_latest_buffer_empty(self, config, mock_stt):
         """Test formatted buffer when empty."""
         sensor = SoundSensor(config=config)
 
@@ -192,7 +170,7 @@ class TestSoundSensorFormattedBuffer:
 
         assert result is None
 
-    def test_formatted_latest_buffer_with_message(self, config):
+    def test_formatted_latest_buffer_with_message(self, config, mock_stt):
         """Test formatted buffer with message."""
         sensor = SoundSensor(config=config)
         sensor.messages = ["테스트 메시지"]
@@ -204,7 +182,7 @@ class TestSoundSensorFormattedBuffer:
         assert "테스트 메시지" in result
         assert sensor.messages == []  # Buffer should be cleared
 
-    def test_formatted_latest_buffer_format(self, config):
+    def test_formatted_latest_buffer_format(self, config, mock_stt):
         """Test formatted buffer has correct format."""
         sensor = SoundSensor(config=config)
         sensor.messages = ["안녕하세요"]
@@ -213,23 +191,3 @@ class TestSoundSensorFormattedBuffer:
 
         assert "// START" in result
         assert "// END" in result
-
-
-class TestSoundSensorLifecycle:
-    """Test SoundSensor start/stop lifecycle."""
-
-    def test_start(self, config, caplog):
-        """Test starting the sensor."""
-        sensor = SoundSensor(config=config)
-
-        sensor.start()
-
-        assert "started" in caplog.text
-
-    def test_stop(self, config, caplog):
-        """Test stopping the sensor."""
-        sensor = SoundSensor(config=config)
-
-        sensor.stop()
-
-        assert "stopped" in caplog.text

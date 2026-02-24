@@ -103,7 +103,7 @@ class TestAudioBgInitialization:
             vad_threshold=0.5,
         )
         assert background.audio_provider is mock_provider_instance
-        mock_provider_instance.start.assert_called_once()
+        mock_provider_instance.start_stream.assert_called_once()
 
     @patch("backgrounds.plugins.audio_bg.AudioProvider")
     def test_background_initialization_custom(self, mock_provider_class, config_custom):

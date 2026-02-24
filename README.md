@@ -35,7 +35,8 @@ Pedestrian Companion Robot is an autonomous navigation system built on the OpenM
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/AI-Robot-SW/openmind-interaction-autonomy.git
+   git clone --recurse-submodules https://github.com/AI-Robot-SW/pedestrian-companion-robot.git
+   
    cd openmind-interaction-autonomy
    ```
 
@@ -51,8 +52,9 @@ Pedestrian Companion Robot is an autonomous navigation system built on the OpenM
    ```bash
    uv venv
    source .venv/bin/activate
-   uv pip install -e ".[dds]"
+   uv pip install -e .
    ```
+   CycloneDDS and Unitree Go2 Python SDK are included by default. Set the robot network interface in config (e.g. `"unitree_ethernet": "enp2s0"`). Only if you see `Could not locate cyclonedds`, see [unitree_sdk2_python](https://github.com/unitreerobotics/unitree_sdk2_python) for building from source.
 
 4. **Configure OpenMind API key**
    - Obtain an API key from [OpenMind Portal](https://portal.openmind.org/)

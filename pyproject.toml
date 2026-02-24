@@ -5,6 +5,7 @@ description = "OM1 - a modern agent and robotics runtime system"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "pyubx2",
     "ultralytics",
     "soundfile",
     "sounddevice",
@@ -19,6 +20,8 @@ dependencies = [
     "eclipse-zenoh>=1.4.0",
     "audiosegment",
     "pyaudio",
+    "requests",
+    "google-auth>=2.0.0",
     "openai>=1.59.5",
     "pillow>=11.1.0",
     "python-dotenv>=1.0.1",
@@ -45,8 +48,12 @@ dependencies = [
     "jinja2>=3.1.3",
     "pydub>=0.25.1",
     "pynput>=1.8.1",
+    "pyyaml>=6.0",
     "dimo-python-sdk @ git+https://github.com/openminddev/dimo-python-sdk.git@6b47fcd28654a4145cedee649a0999a8eb08a2f6",
     "nest-asyncio>=1.6.0",
+    "pyrealsense2",
+    "cyclonedds==0.10.2",
+    "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +61,9 @@ dds = [
     "cyclonedds==0.10.2"
 ]
 macos = ["osascript"]
+grpc = ["google-cloud-speech>=2.21.0"]
+# BEV CUDA kernel (requires NVIDIA CUDA Toolkit). Omit if no GPU / no cuda.h.
+cuda = ["pycuda"]
 
 [dependency-groups]
 dev = [
@@ -69,10 +79,14 @@ dev = [
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 addopts = "-m \"not integration\""
 norecursedirs = ["src/unitree", "system_hw_test", "src/ubtech"]
 markers = [
     "integration: marks tests as integration tests",
+    "live: marks tests that require a live LLM server (Ollama/vLLM)",
+    "no_pycuda: tests that do not require pycuda/CUDA (parse, occupancy grid, lifecycle, data)",
+    "cuda: tests that require GPU/pycuda (e.g. BEV kernel); run on machine with NVIDIA CUDA",
 ]
 
 [tool.black]

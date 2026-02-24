@@ -2,11 +2,25 @@
 Tests for TTSProvider.
 """
 
+import io
+import wave
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 
 from providers.tts_provider import TTSBackend, TTSProvider, TTSState
+
+
+def _create_mock_wav_data() -> bytes:
+    """Create minimal valid WAV data for testing."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)  # 16-bit
+        wf.setframerate(24000)
+        wf.writeframes(b"\x00\x00" * 100)  # 100 samples of silence
+    return buf.getvalue()
 
 
 @pytest.fixture(autouse=True)
@@ -49,6 +63,22 @@ def custom_config():
     }
 
 
+@pytest.fixture
+def naver_clova_config():
+    """Naver Clova configuration for TTSProvider."""
+    return {
+        "backend": TTSBackend.NAVER_CLOVA,
+        "naver_client_id": "test_client_id",
+        "naver_client_secret": "test_client_secret",
+        "speaker": "nara",
+        "output_format": "wav",
+        "sampling_rate": 24000,
+        "volume": 0,
+        "speed": 0,
+        "pitch": 0,
+    }
+
+
 class TestTTSBackendEnum:
     """Test TTSBackend enum."""
 
@@ -67,6 +97,10 @@ class TestTTSBackendEnum:
     def test_local_value(self):
         """Test Local backend value."""
         assert TTSBackend.LOCAL.value == "local"
+
+    def test_naver_clova_value(self):
+        """Test Naver Clova backend value."""
+        assert TTSBackend.NAVER_CLOVA.value == "naver_clova"
 
 
 class TestTTSStateEnum:
@@ -161,7 +195,7 @@ class TestTTSProviderCallbacks:
     def test_register_tts_state_callback(self, default_config):
         """Test registering TTS state callback."""
         provider = TTSProvider(**default_config)
-        callback = MagicMock()
+        callback = MagicMock(__name__="test_callback")
 
         provider.register_tts_state_callback(callback)
 
@@ -170,7 +204,7 @@ class TestTTSProviderCallbacks:
     def test_unregister_tts_state_callback(self, default_config):
         """Test unregistering TTS state callback."""
         provider = TTSProvider(**default_config)
-        callback = MagicMock()
+        callback = MagicMock(__name__="test_callback")
 
         provider.register_tts_state_callback(callback)
         provider.unregister_tts_state_callback(callback)
@@ -180,7 +214,7 @@ class TestTTSProviderCallbacks:
     def test_register_audio_callback(self, default_config):
         """Test registering audio callback."""
         provider = TTSProvider(**default_config)
-        callback = MagicMock()
+        callback = MagicMock(__name__="test_callback")
 
         provider.register_audio_callback(callback)
 
@@ -189,7 +223,7 @@ class TestTTSProviderCallbacks:
     def test_unregister_audio_callback(self, default_config):
         """Test unregistering audio callback."""
         provider = TTSProvider(**default_config)
-        callback = MagicMock()
+        callback = MagicMock(__name__="test_callback")
 
         provider.register_audio_callback(callback)
         provider.unregister_audio_callback(callback)
@@ -366,3 +400,152 @@ class TestTTSProviderConfiguration:
         provider.configure(output_format="pcm_44100")
 
         assert provider._output_format == "pcm_44100"
+
+
+class TestTTSProviderNaverClova:
+    """Test TTSProvider Naver Clova specific functionality."""
+
+    def test_naver_clova_initialization(self, naver_clova_config):
+        """Test TTSProvider initialization with Naver Clova config."""
+        provider = TTSProvider(**naver_clova_config)
+
+        assert provider.backend == TTSBackend.NAVER_CLOVA
+        assert provider._naver_client_id == "test_client_id"
+        assert provider._naver_client_secret == "test_client_secret"
+        assert provider._speaker == "nara"
+        assert provider._output_format == "wav"
+        assert provider._sampling_rate == 24000
+
+    def test_create_naver_clova_message(self, naver_clova_config):
+        """Test creating Naver Clova message."""
+        provider = TTSProvider(**naver_clova_config)
+
+        message = provider.create_pending_message("안녕하세요")
+
+        assert message["text"] == "안녕하세요"
+        assert message["speaker"] == "nara"
+        assert message["format"] == "wav"
+        assert message["sampling-rate"] == 24000
+
+    def test_create_naver_clova_message_with_emotion(self, naver_clova_config):
+        """Test creating Naver Clova message with emotion."""
+        # Use a Pro speaker that supports emotion (vara, vmikyung, etc.)
+        naver_clova_config["speaker"] = "vara"
+        provider = TTSProvider(**naver_clova_config)
+        provider._emotion = 1
+        provider._emotion_strength = 2
+
+        message = provider.create_pending_message("기쁜 소식입니다")
+
+        assert message["emotion"] == 1
+        assert message["emotion-strength"] == 2
+
+
+class TestTTSProviderSynthesis:
+    """Test TTSProvider synthesis methods."""
+
+    @patch("providers.tts_provider.requests.post")
+    def test_synthesize_naver_clova_success(self, mock_post, naver_clova_config):
+        """Test successful Naver Clova synthesis."""
+        mock_wav = _create_mock_wav_data()
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.content = mock_wav
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        provider = TTSProvider(**naver_clova_config)
+
+        result = provider._synthesize_naver_clova({"text": "테스트"})
+
+        assert result is not None
+        mock_post.assert_called_once()
+
+    @patch("providers.tts_provider.requests.post")
+    def test_synthesize_naver_clova_failure(self, mock_post, naver_clova_config):
+        """Test Naver Clova synthesis failure."""
+        mock_post.side_effect = requests.RequestException("API Error")
+
+        provider = TTSProvider(**naver_clova_config)
+
+        result = provider._synthesize_naver_clova({"text": "테스트"})
+
+        assert result is None
+
+    def test_synthesize_naver_clova_no_credentials(self):
+        """Test synthesis without credentials."""
+        provider = TTSProvider(backend=TTSBackend.NAVER_CLOVA)
+
+        result = provider._synthesize_naver_clova({"text": "테스트"})
+
+        assert result is None
+
+    @patch("providers.tts_provider.requests.post")
+    def test_synthesize_naver_clova_headers(self, mock_post, naver_clova_config):
+        """Test Naver Clova synthesis sends correct headers."""
+        mock_wav = _create_mock_wav_data()
+        mock_post.return_value.status_code = 200
+        mock_post.return_value.content = mock_wav
+        mock_post.return_value.raise_for_status = MagicMock()
+
+        provider = TTSProvider(**naver_clova_config)
+        provider._synthesize_naver_clova({"text": "테스트"})
+
+        call_kwargs = mock_post.call_args
+        headers = call_kwargs[1]["headers"]
+        assert headers["X-NCP-APIGW-API-KEY-ID"] == "test_client_id"
+        assert headers["X-NCP-APIGW-API-KEY"] == "test_client_secret"
+        assert headers["Content-Type"] == "application/x-www-form-urlencoded"
+
+
+class TestTTSProviderData:
+    """Test TTSProvider data property."""
+
+    def test_data_property_elevenlabs(self, default_config):
+        """Test data property returns correct structure for ElevenLabs."""
+        provider = TTSProvider(**default_config)
+
+        data = provider.data
+
+        assert "state" in data
+        assert "pending_count" in data
+        assert "backend" in data
+        assert "running" in data
+        assert data["state"] == "idle"
+        assert data["backend"] == "elevenlabs"
+
+    def test_data_property_naver_clova(self, naver_clova_config):
+        """Test data property returns correct structure for Naver Clova."""
+        provider = TTSProvider(**naver_clova_config)
+
+        data = provider.data
+
+        assert "state" in data
+        assert "pending_count" in data
+        assert "backend" in data
+        assert "speaker" in data
+        assert "running" in data
+        assert data["state"] == "idle"
+        assert data["backend"] == "naver_clova"
+        assert data["speaker"] == "nara"
+
+
+class TestTTSProviderPCMExtraction:
+    """Test TTSProvider PCM extraction."""
+
+    def test_extract_pcm_from_wav(self, naver_clova_config):
+        """Test extracting PCM from WAV data."""
+        provider = TTSProvider(**naver_clova_config)
+        wav_data = _create_mock_wav_data()
+
+        pcm_data = provider._extract_pcm_from_wav(wav_data)
+
+        assert pcm_data is not None
+        assert len(pcm_data) == 200  # 100 samples * 2 bytes
+
+    def test_extract_pcm_from_invalid_wav(self, naver_clova_config):
+        """Test extracting PCM from invalid WAV data."""
+        provider = TTSProvider(**naver_clova_config)
+
+        result = provider._extract_pcm_from_wav(b"invalid data")
+
+        # 실패 시 원본 반환
+        assert result == b"invalid data"

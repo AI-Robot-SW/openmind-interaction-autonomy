@@ -404,6 +404,24 @@ def _load_mode_components(mode_config: ModeConfig, system_config: ModeSystemConf
     g_robot_ip = system_config.robot_ip
     g_mode = mode_config.name
 
+    # Load backgrounds
+    mode_config.backgrounds = [
+        load_background(
+            {
+                **bg,
+                "config": add_meta(
+                    bg.get("config", {}),
+                    g_api_key,
+                    g_ut_eth,
+                    g_URID,
+                    g_robot_ip,
+                    g_mode,
+                ),
+            }
+        )
+        for bg in mode_config._raw_backgrounds
+    ]
+    
     # Load inputs
     mode_config.agent_inputs = [
         load_input(
@@ -458,23 +476,6 @@ def _load_mode_components(mode_config: ModeConfig, system_config: ModeSystemConf
         for action in mode_config._raw_actions
     ]
 
-    # Load backgrounds
-    mode_config.backgrounds = [
-        load_background(
-            {
-                **bg,
-                "config": add_meta(
-                    bg.get("config", {}),
-                    g_api_key,
-                    g_ut_eth,
-                    g_URID,
-                    g_robot_ip,
-                    g_mode,
-                ),
-            }
-        )
-        for bg in mode_config._raw_backgrounds
-    ]
 
     # Load LLM
     llm_config = mode_config._raw_llm or system_config.global_cortex_llm

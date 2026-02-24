@@ -23,7 +23,7 @@ from typing import Optional
 from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
-from ...providers.speaker_provider import SpeakerProvider
+from providers.speaker_provider import SpeakerProvider
 
 
 class SpeakerBgConfig(BackgroundConfig):
@@ -98,16 +98,16 @@ class SpeakerBg(Background[SpeakerBgConfig]):
         volume = config.volume
         buffer_size = config.buffer_size
 
-        # TODO: SpeakerProvider 초기화
-        # self.speaker_provider = SpeakerProvider(
-        #     sample_rate=sample_rate,
-        #     channels=channels,
-        #     device_id=device_id,
-        #     device_name=device_name,
-        #     volume=volume,
-        #     buffer_size=buffer_size,
-        # )
-        # self.speaker_provider.start()
+        # SpeakerProvider 초기화 및 시작
+        self.speaker_provider = SpeakerProvider(
+            sample_rate=sample_rate,
+            channels=channels,
+            device_id=device_id,
+            device_name=device_name,
+            volume=volume,
+            buffer_size=buffer_size,
+        )
+        self.speaker_provider.start()
 
         self._last_health_check = time.time()
         self._consecutive_failures = 0
@@ -127,19 +127,16 @@ class SpeakerBg(Background[SpeakerBgConfig]):
         bool
             Provider가 정상이면 True
         """
-        # TODO: 실제 상태 확인 로직
-        # return self.speaker_provider.running
-        return True
+        return self.speaker_provider.running
 
     def _restart_provider(self) -> None:
         """
         SpeakerProvider 재시작.
         """
         logging.warning("Restarting SpeakerProvider...")
-        # TODO: Provider 재시작
-        # self.speaker_provider.stop()
-        # time.sleep(0.5)
-        # self.speaker_provider.start()
+        self.speaker_provider.stop()
+        time.sleep(0.5)
+        self.speaker_provider.start()
         self._consecutive_failures = 0
 
     def run(self) -> None:

@@ -316,6 +316,69 @@ class TestSTTProviderConfiguration:
         assert provider.sample_rate == 48000
 
 
+class TestSTTProviderPauseResume:
+    """Test STTProvider pause/resume for echo prevention."""
+
+    def test_pause(self, default_config):
+        """Test pausing STT provider."""
+        provider = STTProvider(**default_config)
+        provider.start()
+
+        assert provider.is_listening() is True
+        provider.pause()
+        assert provider.is_listening() is False
+
+        provider.stop()
+
+    def test_resume(self, default_config):
+        """Test resuming STT provider."""
+        provider = STTProvider(**default_config)
+        provider.start()
+        provider.pause()
+
+        assert provider.is_listening() is False
+        provider.resume()
+        assert provider.is_listening() is True
+
+        provider.stop()
+
+    def test_pause_idempotent(self, default_config):
+        """Test calling pause twice is safe."""
+        provider = STTProvider(**default_config)
+        provider.start()
+
+        provider.pause()
+        provider.pause()
+        assert provider.is_listening() is False
+
+        provider.stop()
+
+    def test_resume_idempotent(self, default_config):
+        """Test calling resume twice is safe."""
+        provider = STTProvider(**default_config)
+        provider.start()
+
+        provider.resume()
+        provider.resume()
+        assert provider.is_listening() is True
+
+        provider.stop()
+
+    def test_send_audio_dropped_when_paused(self, default_config):
+        """Test audio is dropped when paused."""
+        provider = STTProvider(**default_config)
+        provider.start()
+        provider.pause()
+
+        # send_audio should silently return without queuing
+        provider.send_audio(b"\x00\x00" * 100)
+
+        if provider._audio_queue is not None:
+            assert provider._audio_queue.qsize() == 0
+
+        provider.stop()
+
+
 class TestSTTProviderAudioSending:
     """Test STTProvider audio sending."""
 

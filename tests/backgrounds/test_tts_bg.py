@@ -58,7 +58,7 @@ class TestTTSBgConfig:
         assert config.api_key is None
         assert config.backend_api_key is None
         assert config.backend == "elevenlabs"
-        assert config.voice_id == "JBFqnCBsd6RMkjVDRZzb"
+        assert config.voice_id is None
         assert config.model_id == "eleven_flash_v2_5"
         assert config.output_format == "mp3_44100_128"
         assert config.language == "ko"

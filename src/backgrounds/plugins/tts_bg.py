@@ -28,8 +28,8 @@ from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
 
-from ...providers.tts_provider import TTSProvider, TTSBackend
-from ...providers.speaker_provider import SpeakerProvider
+from providers.tts_provider import TTSProvider, TTSBackend
+from providers.speaker_provider import SpeakerProvider
 
 
 class TTSBgConfig(BackgroundConfig):
@@ -167,34 +167,34 @@ class TTSBg(Background[TTSBgConfig]):
         emotion_strength = config.emotion_strength
         sampling_rate = config.sampling_rate
 
-        # TODO: TTSProvider 초기화
-        # backend_enum = TTSBackend(backend)
-        # self.tts_provider = TTSProvider(
-        #     url="https://api.openmind.org/api/core/elevenlabs/tts",
-        #     api_key=api_key,
-        #     backend_api_key=backend_api_key,
-        #     backend=backend_enum,
-        #     voice_id=voice_id,
-        #     model_id=model_id,
-        #     output_format=output_format,
-        #     language=language,
-        #     enable_tts_interrupt=enable_tts_interrupt,
-        #     # Naver Clova 전용
-        #     naver_client_id=naver_client_id,
-        #     naver_client_secret=naver_client_secret,
-        #     speaker=speaker,
-        #     volume=volume,
-        #     speed=speed,
-        #     pitch=pitch,
-        #     emotion=emotion,
-        #     emotion_strength=emotion_strength,
-        #     sampling_rate=sampling_rate,
-        # )
-        # self.tts_provider.start()
+        # TTSProvider 초기화
+        backend_enum = TTSBackend(backend)
+        self.tts_provider = TTSProvider(
+            api_key=api_key,
+            backend_api_key=backend_api_key,
+            backend=backend_enum,
+            voice_id=voice_id,
+            model_id=model_id,
+            output_format=output_format,
+            language=language,
+            enable_tts_interrupt=enable_tts_interrupt,
+            # Naver Clova 전용
+            naver_client_id=naver_client_id,
+            naver_client_secret=naver_client_secret,
+            speaker=speaker,
+            volume=volume,
+            speed=speed,
+            pitch=pitch,
+            emotion=emotion,
+            emotion_strength=emotion_strength,
+            sampling_rate=sampling_rate,
+        )
+        self.tts_provider.start()
 
-        # TODO: SpeakerProvider에 오디오 콜백 등록
-        # speaker_provider = SpeakerProvider()
-        # self.tts_provider.register_audio_callback(speaker_provider.queue_audio)
+        # SpeakerProvider에 오디오 콜백 등록
+        # SpeakerProvider는 Singleton이므로 이미 생성된 인스턴스를 가져옴
+        speaker_provider = SpeakerProvider()
+        self.tts_provider.register_audio_callback(speaker_provider.queue_audio)
 
         self._last_health_check = time.time()
         self._consecutive_failures = 0
@@ -221,19 +221,16 @@ class TTSBg(Background[TTSBgConfig]):
         bool
             Provider가 정상이면 True
         """
-        # TODO: 실제 상태 확인 로직
-        # return self.tts_provider.running
-        return True
+        return self.tts_provider.running
 
     def _restart_provider(self) -> None:
         """
         TTSProvider 재시작.
         """
         logging.warning("Restarting TTSProvider...")
-        # TODO: Provider 재시작
-        # self.tts_provider.stop()
-        # time.sleep(0.5)
-        # self.tts_provider.start()
+        self.tts_provider.stop()
+        time.sleep(0.5)
+        self.tts_provider.start()
         self._consecutive_failures = 0
 
     def run(self) -> None:

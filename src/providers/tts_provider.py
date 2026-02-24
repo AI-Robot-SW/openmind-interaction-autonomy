@@ -32,17 +32,18 @@ Environment Variables:
     - NAVER_CLIENT_SECRET: Naver Cloud Platform Client Secret
 """
 
+import io
 import logging
 import os
 import queue
 import threading
+import wave
 from enum import Enum
 from typing import Callable, Dict, List, Optional, Union
 
-from .singleton import singleton
+import requests
 
-# TODO: om1_speech import 추가 예정
-# from om1_speech import AudioOutputStream
+from .singleton import singleton
 
 
 def _get_env_or_default(env_var: str, default: Optional[str] = None) -> Optional[str]:
@@ -315,6 +316,25 @@ class TTSProvider:
         self._model_id = value
         logging.debug(f"Model ID set to {value}")
 
+    @property
+    def data(self) -> Optional[Dict]:
+        """
+        Get the current provider data.
+
+        Returns
+        -------
+        Optional[Dict]
+            Current TTS provider state information.
+        """
+        with self._lock:
+            return {
+                "state": self._current_state.value,
+                "pending_count": self._pending_requests.qsize(),
+                "backend": self.backend.value,
+                "speaker": self._speaker,
+                "running": self.running,
+            }
+
     def register_tts_state_callback(
         self, callback: Callable[[TTSState], None]
     ) -> None:
@@ -537,9 +557,112 @@ class TTSProvider:
         with self._lock:
             return self._current_state
 
+    def _synthesize_naver_clova(self, request: Dict) -> Optional[bytes]:
+        """
+        Naver Clova TTS API 호출하여 오디오 바이트 반환.
+
+        Parameters
+        ----------
+        request : Dict
+            TTS 요청 파라미터
+
+        Returns
+        -------
+        Optional[bytes]
+            PCM16 오디오 데이터 또는 실패 시 None
+        """
+        if not self._naver_client_id or not self._naver_client_secret:
+            logging.error("Naver Clova credentials not configured")
+            return None
+
+        headers = {
+            "X-NCP-APIGW-API-KEY-ID": self._naver_client_id,
+            "X-NCP-APIGW-API-KEY": self._naver_client_secret,
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+
+        # API 요청 본문 구성
+        body = {
+            "speaker": request.get("speaker", self._speaker),
+            "text": request.get("text", ""),
+            "format": request.get("format", self._output_format),
+            "volume": request.get("volume", self._volume),
+            "speed": request.get("speed", self._speed),
+            "pitch": request.get("pitch", self._pitch),
+            "alpha": request.get("alpha", self._alpha),
+        }
+
+        # WAV 형식인 경우 샘플링 레이트 추가
+        if request.get("format", self._output_format).lower() == "wav":
+            body["sampling-rate"] = request.get("sampling-rate", self._sampling_rate)
+
+        # 감정 파라미터 (지원 음성인 경우)
+        if "emotion" in request:
+            body["emotion"] = request["emotion"]
+        if "emotion-strength" in request:
+            body["emotion-strength"] = request["emotion-strength"]
+
+        # 끝음 처리 (지원 음성인 경우)
+        if "end-pitch" in request:
+            body["end-pitch"] = request["end-pitch"]
+
+        try:
+            response = requests.post(
+                self.url, headers=headers, data=body, timeout=30
+            )
+            response.raise_for_status()
+
+            # WAV 형식인 경우 PCM 데이터 추출
+            if request.get("format", self._output_format).lower() == "wav":
+                return self._extract_pcm_from_wav(response.content)
+
+            # MP3 등 다른 형식은 그대로 반환 (추후 디코딩 필요)
+            logging.warning(
+                f"Non-WAV format ({request.get('format', self._output_format)}) "
+                "returned. Consider using WAV for direct playback."
+            )
+            return response.content
+
+        except requests.RequestException as e:
+            logging.error(f"Naver Clova TTS request failed: {e}")
+            return None
+
+    def _extract_pcm_from_wav(self, wav_data: bytes) -> bytes:
+        """
+        WAV 파일에서 PCM16 데이터 추출.
+
+        Parameters
+        ----------
+        wav_data : bytes
+            WAV 형식의 오디오 데이터
+
+        Returns
+        -------
+        bytes
+            PCM16 raw 오디오 데이터
+        """
+        try:
+            with io.BytesIO(wav_data) as buf:
+                with wave.open(buf, "rb") as wf:
+                    # WAV 정보 로깅
+                    logging.debug(
+                        f"WAV info: channels={wf.getnchannels()}, "
+                        f"sample_width={wf.getsampwidth()}, "
+                        f"framerate={wf.getframerate()}, "
+                        f"nframes={wf.getnframes()}"
+                    )
+                    return wf.readframes(wf.getnframes())
+        except Exception as e:
+            logging.error(f"Failed to extract PCM from WAV: {e}")
+            # 실패 시 원본 데이터 반환 (WAV 헤더 포함)
+            return wav_data
+
     def _processing_loop(self) -> None:
         """
         TTS 처리 루프 (별도 스레드에서 실행).
+
+        요청 큐에서 TTS 요청을 가져와 합성하고,
+        오디오 콜백을 통해 SpeakerProvider로 전달합니다.
         """
         while self.running:
             try:
@@ -548,18 +671,34 @@ class TTSProvider:
 
                 # 처리 시작
                 self._set_state(TTSState.PROCESSING)
-                logging.debug(f"Processing TTS: {request.get('text', '')[:30]}...")
+                text_preview = request.get("text", "")[:30]
+                logging.debug(f"Processing TTS: {text_preview}...")
 
-                # TODO: 실제 TTS 변환 구현
-                # audio_data = self._synthesize(request)
-                # for callback in self._audio_callbacks:
-                #     callback(audio_data)
+                # TTS 합성
+                audio_data: Optional[bytes] = None
+                backend = request.get("backend", self.backend.value)
 
-                # 재생 중
-                self._set_state(TTSState.SPEAKING)
+                if backend == "naver_clova" or self.backend == TTSBackend.NAVER_CLOVA:
+                    audio_data = self._synthesize_naver_clova(request)
+                else:
+                    # TODO: ElevenLabs 및 다른 백엔드 구현
+                    logging.warning(f"Backend {backend} not yet implemented")
 
-                # TODO: 재생 완료 대기
-                # self._wait_for_playback()
+                if audio_data:
+                    # 오디오 콜백 호출 (SpeakerProvider.queue_audio)
+                    self._set_state(TTSState.SPEAKING)
+                    for callback in self._audio_callbacks:
+                        try:
+                            callback(audio_data)
+                        except Exception as e:
+                            logging.error(f"Audio callback error: {e}")
+
+                    logging.info(
+                        f"TTS audio sent to speaker: {len(audio_data)} bytes"
+                    )
+                else:
+                    logging.error(f"TTS synthesis failed for: {text_preview}...")
+                    self._set_state(TTSState.ERROR)
 
                 # 완료
                 self._set_state(TTSState.IDLE)
