@@ -3582,17 +3582,6 @@ requires-dist = [
 ]
 provides-extras = ["dds", "macos", "grpc", "cuda"]
 
-[package.metadata.requires-dev]
-dev = [
-    { name = "black", specifier = ">=24.10.0" },
-    { name = "isort", specifier = ">=5.13.2" },
-    { name = "pre-commit", specifier = ">=4.1.0" },
-    { name = "pyright", specifier = ">=1.1.406" },
-    { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-asyncio", specifier = ">=0.25.2" },
-    { name = "ruff", specifier = ">=0.9.3" },
-]
-
 [[package]]
 name = "om1-modules"
 version = "0.1.0"
