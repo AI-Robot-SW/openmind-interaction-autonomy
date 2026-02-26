@@ -52,7 +52,7 @@ def _init_vyaw_control(yaw_hold_deg: float, yaw_current_deg: float):
 
     return max(-vyaw_limit, min(vyaw_limit, vyaw))
 
-class _LinearPath:
+class WaypointTracker:
     """
     GPS 좌표 목록(waypoints)을 순서대로 추종하는 경로 추적기.
 
@@ -67,7 +67,7 @@ class _LinearPath:
         self._idx = 0
 
     @classmethod
-    def from_file(cls, path_name: str, reach_tol: float = 5.0, min_quality: int = 5) -> "_LinearPath":
+    def from_file(cls, path_name: str, reach_tol: float = 5.0, min_quality: int = 5) -> "WaypointTracker":
         """
         txt/csv 파일에서 waypoint를 로드해 인스턴스를 생성한다.
 
@@ -84,9 +84,9 @@ class _LinearPath:
                     coords.append((float(row["lat"]), float(row["lon"])))
 
         if not coords:
-            logger.warning("_LinearPath.from_file: quality >= %d 인 waypoint가 없습니다 (%s)", min_quality, p)
+            logger.warning("_WaypointTracker.from_file: quality >= %d 인 waypoint가 없습니다 (%s)", min_quality, p)
 
-        logger.info("_LinearPath.from_file: %d waypoints loaded from %s", len(coords), p)
+        logger.info("_WaypointTracker.from_file: %d waypoints loaded from %s", len(coords), p)
         return cls(coords=coords, reach_tol=reach_tol)
 
     def update(self, lat: float, lon: float) -> Optional[Tuple[float, float]]:
@@ -260,7 +260,7 @@ class GnssRouteProvider:
         현재 위치와 현재 목표 waypoint 사이의 거리가 reach_tol 이내가 되면
         다음 waypoint로 목표를 갱신한다. 마지막 waypoint에 도달하면 루프를 종료.
         """
-        path = _LinearPath(self.waypoints, reach_tol=self.reach_tol_m)
+        path = WaypointTracker(self.waypoints, reach_tol=self.reach_tol_m)
         logger.info("GnssRouteProvider: mission active, following %d waypoints", len(self.waypoints))
 
         while not self._stop_evt.is_set():
