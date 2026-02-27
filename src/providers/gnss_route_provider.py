@@ -211,7 +211,7 @@ class GnssRouteProvider:
         """RTK 신호가 준비될 때까지 대기. 활성화 시 True, 비활성화 시 False."""
         logger.info("GnssRouteProvider: waiting for reliable RTK state …")
         while not self._stop_evt.is_set():
-            gnss = location_provider.get_record().gnss
+            gnss = location_provider.get_state().gnss
             if gnss is not None and (gnss.carrSoln or 0) >= 1:
                 logger.info("GnssRouteProvider: GNSS ready")
                 return True
@@ -228,7 +228,7 @@ class GnssRouteProvider:
         while not self._stop_evt.is_set():
             t_monotonic = time.monotonic()
             odom_prev = unitree_go2_provider.get_odometry()
-            gnss_prev = location_provider.get_record().gnss
+            gnss_prev = location_provider.get_state().gnss
             lat_prev, lon_prev = gnss_prev.lat, gnss_prev.lon
 
             vyaw = _init_vyaw_control(yaw_init_deg, math.degrees(odom_prev.yaw))
@@ -237,7 +237,7 @@ class GnssRouteProvider:
                 return False
 
             odom = unitree_go2_provider.get_odometry()
-            gnss = location_provider.get_record().gnss
+            gnss = location_provider.get_state().gnss
             dw, dn = _haversine_xy(lat_prev, lon_prev, gnss.lat, gnss.lon)
             total_west += dw
             total_north += dn
@@ -264,7 +264,7 @@ class GnssRouteProvider:
         logger.info("GnssRouteProvider: mission active, following %d waypoints", len(self.waypoints))
 
         while not self._stop_evt.is_set():
-            gnss = location_provider.get_record().gnss
+            gnss = location_provider.get_state().gnss
             lat_cur, lon_cur = gnss.lat, gnss.lon
 
             odom = unitree_go2_provider.get_odometry()
@@ -314,9 +314,20 @@ class GnssRouteProvider:
             self._stop_evt.wait(0.1)
 
     def _run(self) -> None:
-        self._heading_calibrated = False
+        # reached_goal은 항상 리셋. heading 캘리브레이션은 이미 완료된 경우 재사용.
+        prev_calibrated = self._heading_calibrated
         self._reached_goal = False
-        self._yaw_offset_deg = 0.0
+        if not prev_calibrated:
+            self._yaw_offset_deg = 0.0
+
+        if not self.waypoints:
+            logger.warning("GnssRouteProvider: waypoints가 비어 있습니다. set_path()로 경로를 설정하세요.")
+            self._set_latest(GnssRouteRecord(
+                t_monotonic=time.monotonic(),
+                heading_calibrated=self._heading_calibrated,
+                reached_goal=False,
+            ))
+            return
 
         if LocationProvider._singleton_class._singleton_instance is None:
             logger.error("GnssRouteProvider: LocationProvider가 초기화되지 않았습니다.")
@@ -331,8 +342,11 @@ class GnssRouteProvider:
         if not self._wait_for_rtk(location_provider):
             return
 
-        if not self._calibrate_heading(location_provider, unitree_go2_provider):
-            return
+        if prev_calibrated:
+            logger.info("GnssRouteProvider: heading already calibrated (yaw_offset=%.2f°), skipping re-calibration", self._yaw_offset_deg)
+        else:
+            if not self._calibrate_heading(location_provider, unitree_go2_provider):
+                return
 
-        gnss = location_provider.get_record().gnss
+        gnss = location_provider.get_state().gnss
         self._follow_path(location_provider, unitree_go2_provider, gnss.lat, gnss.lon)
