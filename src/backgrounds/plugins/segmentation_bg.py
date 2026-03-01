@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -61,23 +62,17 @@ class SegmentationBg(Background[SegmentationConfig]):
             engine_path=engine_path,
             auto_start_camera=bool(self.config.auto_start_camera),
         )
+        self.segmentation_provider.start()
         logging.info(
-            f"Segmentation Provider initialized in background (engine_path: {engine_path})"
+            f"Segmentation Provider initialized and started in background (engine_path: {engine_path})"
         )
 
     def run(self) -> None:
-        """
-        Start the SegmentationProvider.
-
-        The provider manages its own internal loop; this method just ensures it is running.
-        """
-        if self.segmentation_provider.running:
-            return
+        evt = getattr(self, "_orchestrator_stop_event", None)
+        evt = evt if evt is not None else threading.Event()
         try:
-            self.segmentation_provider.start()
-            logging.info("Segmentation Provider started by background run()")
-            while self.segmentation_provider.running:
+            while not evt.is_set() and self.segmentation_provider.running:
                 time.sleep(1.0)
         finally:
             self.segmentation_provider.stop()
-            logging.info("Segmentation Provider stopped by background run()")
+            logging.info("Segmentation Provider stopped")

@@ -17,6 +17,7 @@ Lifecycle:
 """
 
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -145,33 +146,27 @@ class AudioBg(Background[AudioBgConfig]):
         self._consecutive_failures = 0
 
     def run(self) -> None:
-        """
-        백그라운드 루프 실행.
-
-        주기적으로 AudioProvider 상태를 확인하고,
-        문제가 있으면 재시작을 시도합니다.
-        """
-        current_time = time.time()
-
-        # 상태 확인 주기 체크
-        if current_time - self._last_health_check < self.config.health_check_interval_sec:
-            time.sleep(1.0)
-            return
-
-        self._last_health_check = current_time
-
-        # 상태 확인
-        if self._health_check():
-            self._consecutive_failures = 0
-            logging.debug("AudioProvider health check: OK")
-        else:
-            self._consecutive_failures += 1
-            logging.warning(
-                f"AudioProvider health check: FAILED "
-                f"({self._consecutive_failures}/{self._max_failures})"
-            )
-
-            if self._consecutive_failures >= self._max_failures:
-                self._restart_provider()
-
-        time.sleep(1.0)
+        evt = getattr(self, "_orchestrator_stop_event", None)
+        evt = evt if evt is not None else threading.Event()
+        try:
+            while not evt.is_set():
+                current_time = time.time()
+                if current_time - self._last_health_check < self.config.health_check_interval_sec:
+                    time.sleep(1.0)
+                    continue
+                self._last_health_check = current_time
+                if self._health_check():
+                    self._consecutive_failures = 0
+                    logging.debug("AudioProvider health check: OK")
+                else:
+                    self._consecutive_failures += 1
+                    logging.warning(
+                        f"AudioProvider health check: FAILED "
+                        f"({self._consecutive_failures}/{self._max_failures})"
+                    )
+                    if self._consecutive_failures >= self._max_failures:
+                        self._restart_provider()
+                time.sleep(1.0)
+        finally:
+            self.audio_provider.stop()
+            logging.info("AudioProvider stopped")

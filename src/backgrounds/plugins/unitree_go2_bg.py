@@ -6,6 +6,7 @@ Action Connector 등에서 제어 인터페이스를 사용할 수 있게 합니
 """
 
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -73,9 +74,11 @@ class UnitreeGo2Bg(Background[UnitreeGo2BgConfig]):
             raise
 
     def run(self) -> None:
-        """
-        Background process loop.
-
-        Override if you need periodic work.
-        """
-        time.sleep(60)
+        evt = getattr(self, "_orchestrator_stop_event", None)
+        evt = evt if evt is not None else threading.Event()
+        try:
+            while not evt.is_set():
+                time.sleep(1.0)
+        finally:
+            self.unitree_go2_provider.stop()
+            logging.info("Unitree Go2 Provider stopped")

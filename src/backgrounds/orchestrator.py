@@ -41,6 +41,7 @@ class BackgroundOrchestrator:
     def start(self):
         """
         Start background tasks in separate threads.
+        Injects _orchestrator_stop_event into each background so run() can exit when stopping.
         """
         for background in self._config.backgrounds:
             if background.name in self._submitted_backgrounds:
@@ -48,6 +49,7 @@ class BackgroundOrchestrator:
                     f"Background {background.name} already submitted, skipping."
                 )
                 continue
+            background._orchestrator_stop_event = self._stop_event
             self._background_executor.submit(self._run_background_loop, background)
             self._submitted_backgrounds.add(background.name)
 

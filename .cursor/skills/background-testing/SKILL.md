@@ -7,6 +7,17 @@ description: Rules and guidelines for writing pytest tests for Backgrounds in OM
 
 This document provides rules, structure, and patterns for writing pytest tests for **Backgrounds** in OM Cortex Runtime. Use this guide when adding or reviewing Background tests so that tests are consistent, mock the Provider used inside the Background, and run without hardware.
 
+## Implementation rule (test assumption)
+
+**REQUIRED**: Every Background must **initialize and start** its Provider(s) in `__init__`, not in `run()`. That is:
+
+- In `__init__`: construct the Provider with config-derived arguments, then call `provider.start()` (or the provider’s start API, e.g. `start_stream()`).
+- Do **not** defer `start()` to `run()`.
+
+When writing tests, assert that `provider.start()` (or equivalent) is called **once** during Background construction (e.g. `mock_provider_instance.start.assert_called_once()` after `Background(config=config)`). Backgrounds that start the provider in `run()` are non-compliant and should be refactored.
+
+---
+
 ## Quick Checklist
 
 Before submitting Background tests, verify:
@@ -14,7 +25,7 @@ Before submitting Background tests, verify:
 - [ ] Test file: `tests/backgrounds/test_{name}_bg.py`
 - [ ] Fixtures for config (e.g. `config`, `config_default` or `config_with_*`)
 - [ ] Patch the **Provider** used inside the Background (e.g. `@patch("backgrounds.plugins.xxx_bg.XxxProvider")`)
-- [ ] Tests: config init, Background init (Provider called with correct args, `start()` called), name, config access, `run()`, init failure
+- [ ] Tests: config init, Background init (Provider called with correct args, **`start()` called in `__init__`**), name, config access, `run()`, init failure
 - [ ] No real hardware or Provider implementation required to run
 
 ---
@@ -75,7 +86,7 @@ This avoids starting the real Provider (and any HW/SDK).
 | Area | What to verify |
 |------|----------------|
 | **Config** | Config class default and custom values (e.g. `UnitreeGo2BgConfig()`, `UnitreeGo2BgConfig(unitree_ethernet="eth0", timeout=10.0)`). |
-| **Initialization** | With Provider mocked: Background constructs Provider with arguments derived from config (channel, timeout, etc.); stores the instance; calls `provider.start()` once. |
+| **Initialization** | With Provider mocked: Background constructs Provider with arguments derived from config (channel, timeout, etc.); stores the instance; **calls `provider.start()` once in `__init__`** (not in `run()`). |
 | **Config derivation** | If config has optional/whitespace fields (e.g. ethernet), assert Provider is called with stripped/defaulted values. |
 | **Name** | `background.name` equals the class name (e.g. `"UnitreeGo2Bg"`). |
 | **Config access** | `background.config` is the same object as the injected config; attributes match. |
