@@ -301,22 +301,41 @@ class CompositeBackground(Background[CompositeConfig]):
 ### 5.1 Initialization Order
 
 1. Background `__init__` is called by BackgroundOrchestrator
-2. Background initializes Provider(s) in its `__init__`
-3. Provider starts automatically (if `start()` is called in Provider `__init__`)
-4. Background `run()` is called in separate thread by BackgroundOrchestrator
+2. Background initializes Provider(s) in its `__init__` and **calls `provider.start()`** (or equivalent) there
+3. Background `run()` is invoked in a separate thread by BackgroundOrchestrator (repeatedly until shutdown)
 
-### 5.2 Lifecycle Management
+### 5.2 Provider start in `__init__` (required)
+
+**REQUIRED**: Provider startup must happen in Background `__init__`, not in `run()`. After constructing the Provider with config-derived arguments, call `provider.start()` (or the provider’s start API, e.g. `start_stream()`) in the same `__init__`. Do not defer `start()` to `run()`.
+
+### 5.3 Lifecycle Management
 
 - **Background initialization**: Happens once at system startup
-- **Provider initialization**: Happens in Background `__init__`
-- **Background run loop**: Runs continuously in separate thread
-- **Provider lifecycle**: Managed by Provider itself (start/stop)
+- **Provider initialization and start**: Both in Background `__init__`
+- **Background run loop**: Runs in a separate thread; may block (e.g. `while True: time.sleep(1)`) or return periodically (e.g. `time.sleep(60)`)
+- **Provider cleanup**: Providers expose `stop()` (or similar). Whether it is called depends on the Background: some call `provider.stop()` in `run()`’s `finally` block when the run loop exits; others never call it (relying on daemon threads or process exit). Prefer calling `provider.stop()` in `run()`’s `finally` when the provider holds non-daemon threads or hardware resources.
 
-### 5.3 Configuration Flow
+### 5.4 Configuration Flow
 
 ```
-Config File → BackgroundConfig → Background.__init__() → Provider.__init__()
+Config File → BackgroundConfig → Background.__init__() → Provider.__init__() → provider.start()
 ```
+
+### 5.5 run() role and provider stop()
+
+- **Orchestrator**: Calls `background.run()` in a loop per background thread; when `run()` returns, it is called again until `_stop_event` is set, then the executor shuts down.
+- **run() must exist**: The base class and orchestrator expect `run()`; every Background implements or inherits it.
+- **Functionally**:
+  - **Blocking run()** (e.g. `while True: time.sleep(1)` or `while provider.running: sleep`): Keeps the thread alive; the **only** place that can call `provider.stop()` is in `run()`’s `finally` when the loop exits (e.g. interrupt, or provider sets `running=False`). So for Backgrounds that must release provider resources on shutdown, run() is functionally necessary for cleanup.
+  - **Non-blocking run()** (e.g. `time.sleep(60)` then return): Just satisfies the orchestrator loop; typically does **not** call `provider.stop()`. Those providers rely on daemon threads or process exit for cleanup.
+
+| Background | run() body | Calls provider.stop()? | When stop() runs |
+|------------|------------|-------------------------|------------------|
+| location_bg | `try: while True: sleep(1); finally: stop()` | Yes (in finally) | When run() loop exits (e.g. interrupt) |
+| realsense_camera_bg | same pattern | Yes (in finally) | When run() loop exits |
+| segmentation_bg | `try: while provider.running: sleep(1); finally: stop()` | Yes (in finally) | When run() loop exits |
+| pointcloud_bg, unitree_go2_bg, bev_occupancy_grid_bg, etc. | `time.sleep(60)` | No | Not called by Background (daemon / process exit) |
+| audio_bg, speaker_bg, stt_bg, tts_bg | health check + optional restart | Only inside `_restart_provider()` | On restart, not on process shutdown |
 
 ## 6. Review Checklist
 

@@ -1,5 +1,6 @@
-import time
 import logging
+import threading
+import time
 from typing import Optional
 
 from pydantic import Field
@@ -33,21 +34,18 @@ class RealSenseCameraBg(Background[RealSenseCameraBgConfig]):
             fps=self.config.fps,
             align_depth_to_color=self.config.align_depth_to_color,
         )
-
-    def run(self) -> None:
+        self.realsense_camera_provider.start()
         logging.info(
-            f"Starting RealSenseCameraProvider (index={self.config.camera_index}, "
-            f"{self.config.width}x{self.config.height}@{self.config.fps}, "
-            f"align={self.config.align_depth_to_color})"
+            f"RealSenseCameraProvider initialized and started in background "
+            f"(index={self.config.camera_index}, "
+            f"{self.config.width}x{self.config.height}@{self.config.fps})"
         )
 
-        self.realsense_camera_provider.start()
-
-        try:
-            # Background의 생명주기 유지를 위한 루프
-            while True:
-                time.sleep(1.0)
-        finally:
-            logging.info("Stopping RealSenseCameraProvider")
+    def run(self) -> None:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             self.realsense_camera_provider.stop()
+            logging.info("RealSenseCameraProvider stopped")
+            return
+        time.sleep(1.0)
 

@@ -17,6 +17,7 @@ Lifecycle:
 """
 
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -140,33 +141,23 @@ class SpeakerBg(Background[SpeakerBgConfig]):
         self._consecutive_failures = 0
 
     def run(self) -> None:
-        """
-        백그라운드 루프 실행.
-
-        주기적으로 SpeakerProvider 상태를 확인하고,
-        문제가 있으면 재시작을 시도합니다.
-        """
-        current_time = time.time()
-
-        # 상태 확인 주기 체크
-        if current_time - self._last_health_check < self.config.health_check_interval_sec:
-            time.sleep(1.0)
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            self.speaker_provider.stop()
+            logging.info("SpeakerProvider stopped")
             return
-
-        self._last_health_check = current_time
-
-        # 상태 확인
-        if self._health_check():
-            self._consecutive_failures = 0
-            logging.debug("SpeakerProvider health check: OK")
-        else:
-            self._consecutive_failures += 1
-            logging.warning(
-                f"SpeakerProvider health check: FAILED "
-                f"({self._consecutive_failures}/{self._max_failures})"
-            )
-
-            if self._consecutive_failures >= self._max_failures:
-                self._restart_provider()
-
+        current_time = time.time()
+        if current_time - self._last_health_check >= self.config.health_check_interval_sec:
+            self._last_health_check = current_time
+            if self._health_check():
+                self._consecutive_failures = 0
+                logging.debug("SpeakerProvider health check: OK")
+            else:
+                self._consecutive_failures += 1
+                logging.warning(
+                    f"SpeakerProvider health check: FAILED "
+                    f"({self._consecutive_failures}/{self._max_failures})"
+                )
+                if self._consecutive_failures >= self._max_failures:
+                    self._restart_provider()
         time.sleep(1.0)
