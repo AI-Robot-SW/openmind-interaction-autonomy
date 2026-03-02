@@ -61,12 +61,10 @@ class LocationBg(Background[LocationBgConfig]):
         logger.info("LocationProvider initialized and started in background")
 
     def run(self) -> None:
-        evt = getattr(self, "_orchestrator_stop_event", None)
-        evt = evt if evt is not None else threading.Event()
-        try:
-            while not evt.is_set():
-                time.sleep(1.0)
-        finally:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             if self.location_provider is not None:
                 self.location_provider.stop()
                 logger.info("LocationProvider stopped")
+            return
+        time.sleep(1.0)

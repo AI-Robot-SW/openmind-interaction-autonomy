@@ -58,18 +58,22 @@ class BackgroundOrchestrator:
     def _run_background_loop(self, background: Background):
         """
         Thread-based background loop.
+        Calls run() until stop is requested; after stop_event is set,
+        run() is invoked one more time so the background can perform cleanup.
 
         Parameters
         ----------
         background : Background
             The background task to run.
         """
-        while not self._stop_event.is_set():
+        while True:
             try:
                 background.run()
             except Exception as e:
                 logging.error(f"Error in background {background.name}: {e}")
                 time.sleep(0.1)
+            if self._stop_event.is_set():
+                break
 
     def stop(self):
         """

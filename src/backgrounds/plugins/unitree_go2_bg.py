@@ -74,11 +74,9 @@ class UnitreeGo2Bg(Background[UnitreeGo2BgConfig]):
             raise
 
     def run(self) -> None:
-        evt = getattr(self, "_orchestrator_stop_event", None)
-        evt = evt if evt is not None else threading.Event()
-        try:
-            while not evt.is_set():
-                time.sleep(1.0)
-        finally:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             self.unitree_go2_provider.stop()
             logging.info("Unitree Go2 Provider stopped")
+            return
+        time.sleep(1.0)

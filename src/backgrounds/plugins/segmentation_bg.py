@@ -68,11 +68,9 @@ class SegmentationBg(Background[SegmentationConfig]):
         )
 
     def run(self) -> None:
-        evt = getattr(self, "_orchestrator_stop_event", None)
-        evt = evt if evt is not None else threading.Event()
-        try:
-            while not evt.is_set() and self.segmentation_provider.running:
-                time.sleep(1.0)
-        finally:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             self.segmentation_provider.stop()
             logging.info("Segmentation Provider stopped")
+            return
+        time.sleep(1.0)

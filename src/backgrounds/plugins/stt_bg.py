@@ -268,27 +268,23 @@ class STTBg(Background[STTBgConfig]):
         return False
 
     def run(self) -> None:
-        evt = getattr(self, "_orchestrator_stop_event", None)
-        evt = evt if evt is not None else threading.Event()
-        try:
-            while not evt.is_set():
-                current_time = time.time()
-                if current_time - self._last_health_check < self.config.health_check_interval_sec:
-                    time.sleep(1.0)
-                    continue
-                self._last_health_check = current_time
-                if self._health_check():
-                    self._consecutive_failures = 0
-                    self._reconnect_attempts = 0
-                    logging.debug("STTProvider health check: OK")
-                else:
-                    self._consecutive_failures += 1
-                    logging.warning(
-                        f"STTProvider health check: FAILED ({self._consecutive_failures})"
-                    )
-                    if not self._reconnect():
-                        logging.error("STTProvider is unavailable")
-                time.sleep(1.0)
-        finally:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             self.stt_provider.stop()
             logging.info("STTProvider stopped")
+            return
+        current_time = time.time()
+        if current_time - self._last_health_check >= self.config.health_check_interval_sec:
+            self._last_health_check = current_time
+            if self._health_check():
+                self._consecutive_failures = 0
+                self._reconnect_attempts = 0
+                logging.debug("STTProvider health check: OK")
+            else:
+                self._consecutive_failures += 1
+                logging.warning(
+                    f"STTProvider health check: FAILED ({self._consecutive_failures})"
+                )
+                if not self._reconnect():
+                    logging.error("STTProvider is unavailable")
+        time.sleep(1.0)

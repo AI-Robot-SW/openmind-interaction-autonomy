@@ -165,13 +165,13 @@ def test_background_config_access(mock_provider_class, config_with_ethernet):
 @patch("backgrounds.plugins.unitree_go2_bg.UnitreeGo2Provider")
 @patch("backgrounds.plugins.unitree_go2_bg.time.sleep")
 def test_run_sleeps(mock_sleep, mock_provider_class, config):
-    """run() calls time.sleep(60)."""
+    """run() with event not set calls time.sleep(1.0) and returns (orchestrator drives the loop)."""
     mock_provider_class.return_value = MagicMock()
     background = UnitreeGo2Bg(config=config)
 
     background.run()
 
-    mock_sleep.assert_called_once_with(60)
+    mock_sleep.assert_called_once_with(1.0)
 
 
 # ----- Init failure -----

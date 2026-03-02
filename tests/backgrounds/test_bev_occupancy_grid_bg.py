@@ -193,7 +193,7 @@ def test_background_config_access(mock_provider_class, config):
 
 @patch("backgrounds.plugins.bev_occupancy_grid_bg.BEVOccupancyGridProvider")
 def test_run_exits_and_stops_provider_when_event_set(mock_provider_class, config):
-    """run() exits the loop when _orchestrator_stop_event is set and calls provider.stop() in finally."""
+    """run() when _orchestrator_stop_event is set calls provider.stop() and returns (no inner loop)."""
     mock_provider_instance = MagicMock()
     mock_provider_class.return_value = mock_provider_instance
 
@@ -208,24 +208,21 @@ def test_run_exits_and_stops_provider_when_event_set(mock_provider_class, config
 
 @patch("backgrounds.plugins.bev_occupancy_grid_bg.BEVOccupancyGridProvider")
 @patch("backgrounds.plugins.bev_occupancy_grid_bg.time.sleep")
-def test_run_loops_sleep_until_event_set_then_stops_provider(mock_sleep, mock_provider_class, config):
-    """run() loops with time.sleep(1.0) until event is set, then calls provider.stop() in finally."""
+def test_run_sleeps_when_event_not_set_then_stops_on_next_run_when_event_set(mock_sleep, mock_provider_class, config):
+    """run() with event not set calls time.sleep(1.0) and returns; next run() with event set calls provider.stop()."""
     mock_provider_instance = MagicMock()
     mock_provider_class.return_value = mock_provider_instance
 
     stop_evt = threading.Event()
-
-    def set_event_on_first_sleep(*args, **kwargs):
-        stop_evt.set()
-
-    mock_sleep.side_effect = set_event_on_first_sleep
-
     background = BEVOccupancyGridBg(config=config)
     background._orchestrator_stop_event = stop_evt
 
     background.run()
+    mock_sleep.assert_called_once_with(1.0)
+    mock_provider_instance.stop.assert_not_called()
 
-    mock_sleep.assert_called_with(1.0)
+    stop_evt.set()
+    background.run()
     mock_provider_instance.stop.assert_called_once()
 
 

@@ -30,6 +30,7 @@ class Background(T.Generic[ConfigType]):
         """
         self.config = config
         self.name = getattr(config, "name", type(self).__name__)
+        self._orchestrator_stop_event = None
 
     def run(self) -> None:
         """

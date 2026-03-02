@@ -71,11 +71,9 @@ class PointCloudBg(Background[PointCloudConfig]):
         )
 
     def run(self) -> None:
-        evt = getattr(self, "_orchestrator_stop_event", None)
-        evt = evt if evt is not None else threading.Event()
-        try:
-            while not evt.is_set():
-                time.sleep(1.0)
-        finally:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             self.pointcloud_provider.stop()
             logging.info("PointCloud Provider stopped")
+            return
+        time.sleep(1.0)
