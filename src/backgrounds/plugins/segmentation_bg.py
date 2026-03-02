@@ -1,4 +1,7 @@
 import logging
+import threading
+import time
+from pathlib import Path
 from typing import Optional
 
 from pydantic import Field
@@ -15,10 +18,22 @@ class SegmentationConfig(BackgroundConfig):
     ----------
     engine_path : Optional[str]
         Path to TensorRT engine file (default: "").
+    auto_start_camera : bool
+        Whether to start the camera automatically (default: False).
     """
 
     engine_path: Optional[str] = Field(
-        default="", description="Path to TensorRT engine file"
+        default=str(
+            Path(__file__).resolve().parents[2]
+            / "providers"
+            / "engines"
+            / "trt"
+            / "ddrnet23_fp16_kist-v1-80k_1x480x640.engine"
+        ),
+        description="Path to TensorRT engine file",
+    )
+    auto_start_camera: bool = Field(
+        default=False, description="Start camera automatically"
     )
 
 
@@ -43,11 +58,19 @@ class SegmentationBg(Background[SegmentationConfig]):
         engine_path = self.config.engine_path or ""
 
         # Initialize Provider (singleton, so same instance shared)
-        self.segmentation_provider = SegmentationProvider(engine_path=engine_path)
-
-        # Start Provider
-        self.segmentation_provider.start()
-
-        logging.info(
-            f"Segmentation Provider initialized in background (engine_path: {engine_path})"
+        self.segmentation_provider = SegmentationProvider(
+            engine_path=engine_path,
+            auto_start_camera=bool(self.config.auto_start_camera),
         )
+        self.segmentation_provider.start()
+        logging.info(
+            f"Segmentation Provider initialized and started in background (engine_path: {engine_path})"
+        )
+
+    def run(self) -> None:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            self.segmentation_provider.stop()
+            logging.info("Segmentation Provider stopped")
+            return
+        time.sleep(1.0)

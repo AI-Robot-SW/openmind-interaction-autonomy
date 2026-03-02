@@ -1,4 +1,6 @@
 import logging
+import threading
+import time
 from typing import Optional
 
 from pydantic import Field
@@ -67,3 +69,11 @@ class PointCloudBg(Background[PointCloudConfig]):
         logging.info(
             f"PointCloud Provider initialized in background (range_max: {range_max}, stride: {stride}, sync_slop: {sync_slop})"
         )
+
+    def run(self) -> None:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            self.pointcloud_provider.stop()
+            logging.info("PointCloud Provider stopped")
+            return
+        time.sleep(1.0)

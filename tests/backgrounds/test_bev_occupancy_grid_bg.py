@@ -9,6 +9,7 @@ Follows .cursor/skills/background-testing/SKILL.md:
 Run: uv run pytest tests/backgrounds/test_bev_occupancy_grid_bg.py -v
 """
 
+import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -191,15 +192,38 @@ def test_background_config_access(mock_provider_class, config):
 
 
 @patch("backgrounds.plugins.bev_occupancy_grid_bg.BEVOccupancyGridProvider")
-@patch("backgrounds.plugins.bev_occupancy_grid_bg.time.sleep")
-def test_run_sleeps(mock_sleep, mock_provider_class, config):
-    """run() calls time.sleep(60)."""
-    mock_provider_class.return_value = MagicMock()
+def test_run_exits_and_stops_provider_when_event_set(mock_provider_class, config):
+    """run() when _orchestrator_stop_event is set calls provider.stop() and returns (no inner loop)."""
+    mock_provider_instance = MagicMock()
+    mock_provider_class.return_value = mock_provider_instance
+
     background = BEVOccupancyGridBg(config=config)
+    background._orchestrator_stop_event = threading.Event()
+    background._orchestrator_stop_event.set()
 
     background.run()
 
-    mock_sleep.assert_called_once_with(60)
+    mock_provider_instance.stop.assert_called_once()
+
+
+@patch("backgrounds.plugins.bev_occupancy_grid_bg.BEVOccupancyGridProvider")
+@patch("backgrounds.plugins.bev_occupancy_grid_bg.time.sleep")
+def test_run_sleeps_when_event_not_set_then_stops_on_next_run_when_event_set(mock_sleep, mock_provider_class, config):
+    """run() with event not set calls time.sleep(1.0) and returns; next run() with event set calls provider.stop()."""
+    mock_provider_instance = MagicMock()
+    mock_provider_class.return_value = mock_provider_instance
+
+    stop_evt = threading.Event()
+    background = BEVOccupancyGridBg(config=config)
+    background._orchestrator_stop_event = stop_evt
+
+    background.run()
+    mock_sleep.assert_called_once_with(1.0)
+    mock_provider_instance.stop.assert_not_called()
+
+    stop_evt.set()
+    background.run()
+    mock_provider_instance.stop.assert_called_once()
 
 
 # ----- Init failure -----

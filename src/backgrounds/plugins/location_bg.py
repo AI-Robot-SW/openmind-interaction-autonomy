@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import time
-import serial
 import logging
+import serial
+import threading
+import time
 from typing import Optional
 
 from pydantic import Field
@@ -56,15 +57,14 @@ class LocationBg(Background[LocationBgConfig]):
         uwb = UwbProvider(ser=self._uwb_ser)
 
         self.location_provider = LocationProvider(gnss=rtk, uwb=uwb)
-
+        self.location_provider.start()
+        logger.info("LocationProvider initialized and started in background")
 
     def run(self) -> None:
-        logger.info("Starting LocationProvider")
-        self.location_provider.start()
-
-        try:
-            while True:
-                time.sleep(1.0)
-        finally:
-            logger.info("Stopping LocationProvider")
-            self.location_provider.stop()
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            if self.location_provider is not None:
+                self.location_provider.stop()
+                logger.info("LocationProvider stopped")
+            return
+        time.sleep(1.0)

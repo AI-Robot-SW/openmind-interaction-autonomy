@@ -26,6 +26,7 @@ Google Cloud STT:
 """
 
 import logging
+import threading
 import time
 from typing import List, Optional
 
@@ -267,34 +268,23 @@ class STTBg(Background[STTBgConfig]):
         return False
 
     def run(self) -> None:
-        """
-        백그라운드 루프 실행.
-
-        주기적으로 STTProvider 상태를 확인하고,
-        연결이 끊어지면 재연결을 시도합니다.
-        """
-        current_time = time.time()
-
-        # 상태 확인 주기 체크
-        if current_time - self._last_health_check < self.config.health_check_interval_sec:
-            time.sleep(1.0)
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            self.stt_provider.stop()
+            logging.info("STTProvider stopped")
             return
-
-        self._last_health_check = current_time
-
-        # 상태 확인
-        if self._health_check():
-            self._consecutive_failures = 0
-            self._reconnect_attempts = 0
-            logging.debug("STTProvider health check: OK")
-        else:
-            self._consecutive_failures += 1
-            logging.warning(
-                f"STTProvider health check: FAILED ({self._consecutive_failures})"
-            )
-
-            # 재연결 시도
-            if not self._reconnect():
-                logging.error("STTProvider is unavailable")
-
+        current_time = time.time()
+        if current_time - self._last_health_check >= self.config.health_check_interval_sec:
+            self._last_health_check = current_time
+            if self._health_check():
+                self._consecutive_failures = 0
+                self._reconnect_attempts = 0
+                logging.debug("STTProvider health check: OK")
+            else:
+                self._consecutive_failures += 1
+                logging.warning(
+                    f"STTProvider health check: FAILED ({self._consecutive_failures})"
+                )
+                if not self._reconnect():
+                    logging.error("STTProvider is unavailable")
         time.sleep(1.0)

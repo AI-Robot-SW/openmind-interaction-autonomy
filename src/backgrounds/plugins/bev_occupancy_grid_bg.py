@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 from typing import Optional
 
@@ -107,10 +108,9 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
         )
 
     def run(self) -> None:
-        """
-        Background process loop.
-
-        This Background only keeps the BEVOccupancyGridProvider running; BEV
-        updates are handled inside the Provider. No additional work is done here.
-        """
-        time.sleep(60)
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
+            self.bev_occupancy_grid_provider.stop()
+            logging.info("BEV Occupancy Grid Provider stopped")
+            return
+        time.sleep(1.0)
