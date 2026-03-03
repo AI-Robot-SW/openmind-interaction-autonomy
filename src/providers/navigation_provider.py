@@ -162,8 +162,7 @@ class NavigationProvider:
         self._thread.join(timeout=2.0)
         if self._thread.is_alive():
             logger.warning("NavigationProvider worker thread did not stop within timeout")
-        else:
-            self._thread = None
+        self._thread = None
 
         self._dwa.stop()
         self._gnss.stop()

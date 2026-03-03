@@ -67,11 +67,11 @@ class WaypointTracker:
         self._idx = 0
 
     @classmethod
-    def from_file(cls, path_name: str, reach_tol: float = 5.0, min_quality: int = 5) -> "WaypointTracker":
+    def from_file(cls, path_name: str, reach_tol: float = 5.0) -> "WaypointTracker":
         """
         txt/csv 파일에서 waypoint를 로드해 인스턴스를 생성한다.
 
-        파일 형식: time,lat,lon,hdop,quality (헤더 포함)
+        파일 형식: time,lat,lon,... (헤더 포함, lat/lon 컬럼 사용)
         """
         p = Path(path_name)
         if not p.is_absolute():
@@ -80,11 +80,10 @@ class WaypointTracker:
         coords: List[Tuple[float, float]] = []
         with open(p, newline="") as f:
             for row in csv.DictReader(f):
-                if int(row["quality"]) >= min_quality:
-                    coords.append((float(row["lat"]), float(row["lon"])))
+                coords.append((float(row["lat"]), float(row["lon"])))
 
         if not coords:
-            logger.warning("_WaypointTracker.from_file: quality >= %d 인 waypoint가 없습니다 (%s)", min_quality, p)
+            logger.warning("_WaypointTracker.from_file: waypoint가 없습니다 (%s)", p)
 
         logger.info("_WaypointTracker.from_file: %d waypoints loaded from %s", len(coords), p)
         return cls(coords=coords, reach_tol=reach_tol)
