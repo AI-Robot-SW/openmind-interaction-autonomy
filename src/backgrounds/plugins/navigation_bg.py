@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import math
+import threading
 import time
 from typing import List, Optional, Tuple
 
@@ -124,13 +125,13 @@ class NavigationBg(Background[NavigationBgConfig]):
             tick_dt=1.0 / max(1e-3, config.monitor_rate_hz),
         )
 
-    def run(self) -> None:
-        logger.info("NavigationBg: starting NavigationProvider")
         self.navigation_provider.start()
-        try:
-            while True:
-                time.sleep(1.0)
-        finally:
+        logger.info("NavigationBg: NavigationProvider initialized in background")
+
+    def run(self) -> None:
+        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        if evt.is_set():
             logger.info("NavigationBg: stopping NavigationProvider")
             self.navigation_provider.stop()
-
+            return
+        time.sleep(1.0)
