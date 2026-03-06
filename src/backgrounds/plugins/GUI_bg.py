@@ -3,6 +3,8 @@ GUI Background - 음성 볼륨 WebSocket 브로드캐스트 서비스
 
 이 모듈은 AudioProvider의 계산된 볼륨 값을 읽어
 WebSocket(`/voice_spectrum`)으로 주기적으로 브로드캐스트합니다.
+추가로 SubtitleProvider의 최신 subtitle snapshot을
+WebSocket(`/subtitles`)으로 브로드캐스트합니다.
 """
 
 import asyncio
@@ -17,6 +19,7 @@ from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
 from providers.audio_provider import AudioProvider
+from providers.subtitle_provider import SubtitleProvider
 
 
 class GUIBgConfig(BackgroundConfig):
@@ -25,6 +28,9 @@ class GUIBgConfig(BackgroundConfig):
     host: str = Field(default="0.0.0.0", description="WebSocket host")
     port: int = Field(default=8767, description="WebSocket port")
     ws_path: str = Field(default="/voice_spectrum", description="WebSocket path")
+    subtitle_ws_path: str = Field(
+        default="/subtitles", description="Subtitle WebSocket path"
+    )
     broadcast_interval_sec: float = Field(
         default=0.05, description="볼륨 브로드캐스트 주기 (초)"
     )
@@ -35,19 +41,22 @@ class GUIBgConfig(BackgroundConfig):
 
 class GUIBg(Background[GUIBgConfig]):
     """
-    AudioProvider의 볼륨 값을 WebSocket으로 브로드캐스트하는 background.
+    AudioProvider의 볼륨 값과 SubtitleProvider snapshot을
+    WebSocket으로 브로드캐스트하는 background.
     """
 
     def __init__(self, config: GUIBgConfig):
         super().__init__(config)
 
         self.audio_provider = AudioProvider()
+        self.subtitle_provider = SubtitleProvider()
         if not self.audio_provider.running:
             logging.warning(
                 "AudioProvider is not running. Start AudioBg first for live volume updates."
             )
 
-        self._connections = set()
+        self._audio_connections = set()
+        self._subtitle_connections = set()
         self._server = None
         self._server_loop: Optional[asyncio.AbstractEventLoop] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -123,13 +132,22 @@ class GUIBg(Background[GUIBgConfig]):
             request = getattr(websocket, "request", None)
             path = getattr(request, "path", None)
 
-        if path is not None and path != self.config.ws_path:
-            await websocket.close(code=1008, reason=f"Use {self.config.ws_path}")
+        if path == self.config.ws_path:
+            connections = self._audio_connections
+            payload = self._build_audio_payload()
+        elif path == self.config.subtitle_ws_path:
+            connections = self._subtitle_connections
+            payload = self._build_subtitle_payload()
+        else:
+            await websocket.close(
+                code=1008,
+                reason=f"Use {self.config.ws_path} or {self.config.subtitle_ws_path}",
+            )
             return
 
-        self._connections.add(websocket)
+        connections.add(websocket)
         try:
-            await websocket.send(json.dumps(self._build_payload()))
+            await websocket.send(json.dumps(payload))
             async for _ in websocket:
                 # Client messages are ignored; server is push-only.
                 pass
@@ -138,41 +156,62 @@ class GUIBg(Background[GUIBgConfig]):
         except Exception as e:
             logging.error("GUIBg client handler error: %s", e)
         finally:
-            self._connections.discard(websocket)
+            connections.discard(websocket)
 
     async def _broadcast_loop(self) -> None:
         interval = max(0.01, float(self.config.broadcast_interval_sec))
         try:
             while not self._shutdown_event.is_set():
-                if self._connections:
-                    payload = json.dumps(self._build_payload())
+                if self._audio_connections:
+                    payload = json.dumps(self._build_audio_payload())
                     stale = []
-                    for conn in list(self._connections):
+                    for conn in list(self._audio_connections):
                         try:
                             await conn.send(payload)
                         except Exception:
                             stale.append(conn)
                     for conn in stale:
-                        self._connections.discard(conn)
+                        self._audio_connections.discard(conn)
+
+                if self._subtitle_connections:
+                    payload = json.dumps(self._build_subtitle_payload())
+                    stale = []
+                    for conn in list(self._subtitle_connections):
+                        try:
+                            await conn.send(payload)
+                        except Exception:
+                            stale.append(conn)
+                    for conn in stale:
+                        self._subtitle_connections.discard(conn)
                 await asyncio.sleep(interval)
         except asyncio.CancelledError:
             return
 
     async def _cleanup_server(self) -> None:
-        for conn in list(self._connections):
+        for conn in list(self._audio_connections) + list(self._subtitle_connections):
             try:
                 await conn.close()
             except Exception:
                 pass
-        self._connections.clear()
+        self._audio_connections.clear()
+        self._subtitle_connections.clear()
 
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()
             self._server = None
 
-    def _build_payload(self) -> float:
-        return float(self.audio_provider.get_audio_level())
+    def _build_payload(self) -> dict:
+        return {
+            "audio_level": float(self.audio_provider.get_audio_level()),
+            "subtitle": self.subtitle_provider.data,
+        }
+
+    def _build_audio_payload(self) -> float:
+        return float(self._build_payload()["audio_level"])
+
+    def _build_subtitle_payload(self) -> dict:
+        return dict(self._build_payload()["subtitle"])
 
     # ---- Lifecycle ----
 
