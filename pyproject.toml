@@ -37,6 +37,7 @@ dependencies = [
     "cv_bridge",
     "torch",
     "torchvision",
+    "whisper-timestamped>=1.15.9",
     "pyserial",
     "py-mjpeg",
     "fastapi>=0.110.0",

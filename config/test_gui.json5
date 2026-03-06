@@ -54,7 +54,7 @@
         "host": "0.0.0.0",
         "port": 8767,
         "ws_path": "/voice_spectrum",
-        "broadcast_interval_sec": 0.05,
+        "broadcast_interval_sec": 0.02,
         "health_check_interval_sec": 10.0
       }
     }
