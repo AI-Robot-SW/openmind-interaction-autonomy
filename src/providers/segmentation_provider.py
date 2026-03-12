@@ -6,7 +6,6 @@ import yaml
 import logging
 import threading
 import numpy as np
-import pycuda.driver as cuda
 
 from pathlib import Path
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ from typing import List, Optional
 
 from .singleton import singleton
 
+from providers.utils.gpu_worker import GPUWorker
 from providers.utils.trt_utils.trt_engine import TRTEngine
 from providers.realsense_camera_provider import RealSenseCameraProvider, CameraFrame
 
@@ -27,7 +27,6 @@ _DEFAULT_LABELS_PATH = _BASE_DIR / "engines" / "labels" / "mapillary_vistas_ddrn
 # DDRNet ImageNet 정규화 파라미터
 _DDRNET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 _DDRNET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-
 
 # BGR colormap: category index → (B, G, R)
 # _SEMANTIC_COLORS = np.array([
@@ -60,17 +59,16 @@ class SegmentationFrame:
 @singleton
 class SegmentationProvider:
     """
-    background thread에서 realsense camera frame을 읽어
-    DDRNet TensorRT inference을 수행하고 최신 결과를 data 프로퍼티로 노출
+    background thread에서 realsense camera frame을 읽어 DDRNet TensorRT 추론을 수행하고
+    최신 결과를 data 프로퍼티로 노출. GPU 연산은 GPUWorker를 통해 실행
     """
 
     def __init__(self):
         self.camera_provider = RealSenseCameraProvider()
 
-        # heavy objects (lazy-loaded in worker thread)
         self._engine: Optional[TRTEngine] = None
-        self._cuda_ctx = None
         self._class_lut: Optional[np.ndarray] = None
+        self._gpu_worker: Optional[GPUWorker] = None
 
         self._data: Optional[SegmentationFrame] = None
         self._lock = threading.Lock()
@@ -84,6 +82,8 @@ class SegmentationProvider:
         if self._thread and self._thread.is_alive():
             logging.warning("SegmentationProvider already running")
             return
+
+        self._gpu_worker = GPUWorker()
 
         self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
@@ -111,18 +111,13 @@ class SegmentationProvider:
         logging.info("SegmentationProvider stopped")
 
     def _load_engine(self) -> None:
-        """TRT 엔진과 LUT를 worker thread에서 최초 1회 로드"""
+        """TRT 엔진과 LUT를 GPUWorker를 통해 최초 1회 로드"""
         if self._engine is not None:
             return
 
-        try:
-            cuda.init()
-            if cuda.Context.get_current() is None:
-                self._cuda_ctx = cuda.Device(0).make_context()
-        except Exception as e:
-            logging.warning(f"CUDA context init failed or unavailable: {e}")
-
-        self._engine = TRTEngine(_DEFAULT_ENGINE_PATH)
+        self._engine = self._gpu_worker.submit(
+            lambda: TRTEngine(_DEFAULT_ENGINE_PATH)
+        ).result()
 
         with open(_DEFAULT_LABELS_PATH) as f:
             _labels = yaml.safe_load(f)
@@ -141,15 +136,6 @@ class SegmentationProvider:
         img = (img - _DDRNET_MEAN) / _DDRNET_STD
         return np.ascontiguousarray(img.transpose(2, 0, 1)[np.newaxis])  # HWC → 1CHW, C-contiguous
 
-    def _cleanup_cuda_ctx(self) -> None:
-        if self._cuda_ctx is not None:
-            try:
-                self._cuda_ctx.pop()
-                self._cuda_ctx.detach()
-            except Exception as e:
-                logging.warning(f"CUDA context cleanup failed: {e}")
-            self._cuda_ctx = None
-
     def _process_frame(self, frame: CameraFrame) -> SegmentationFrame:
         """CameraFrame 1개에 대해 segmentation 수행 후 결과 반환"""
         if self._engine is None:
@@ -157,7 +143,9 @@ class SegmentationProvider:
         t0 = time.monotonic()
 
         pixel_values = self._preprocess(frame)
-        outputs = self._engine.infer(pixel_values)
+        outputs = self._gpu_worker.submit(
+            lambda: self._engine.infer(pixel_values)
+        ).result()
 
         # logits: [1, C, H, W] → argmax (모델 출력 크기, uint8)
         # full-size int32 predicted_map을 만들지 않고, LUT를 소 크기에서 먼저 적용
@@ -191,7 +179,6 @@ class SegmentationProvider:
             logging.exception("SegmentationProvider init failed")
             self.running = False
             self._engine = None
-            self._cleanup_cuda_ctx()
             return
 
         try:
@@ -210,4 +197,3 @@ class SegmentationProvider:
                         self._data = None
         finally:
             self._engine = None
-            self._cleanup_cuda_ctx()
