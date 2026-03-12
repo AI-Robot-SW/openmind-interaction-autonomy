@@ -196,4 +196,6 @@ class SegmentationProvider:
                     with self._lock:
                         self._data = None
         finally:
+            if self._engine is not None and self._gpu_worker is not None:
+                self._gpu_worker.submit(self._engine.free).result()
             self._engine = None

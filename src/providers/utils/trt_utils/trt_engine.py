@@ -1,6 +1,8 @@
-import tensorrt as trt
-import pycuda.driver as cuda
+import logging
+
 import numpy as np
+import pycuda.driver as cuda
+import tensorrt as trt
 
 class TRTEngine:
     def __init__(self, engine_path):
@@ -11,8 +13,8 @@ class TRTEngine:
         with open(engine_path, 'rb') as f:
             engine_data = f.read()
         
-        runtime = trt.Runtime(self.logger)
-        self.engine = runtime.deserialize_cuda_engine(engine_data)
+        self.runtime = trt.Runtime(self.logger)
+        self.engine = self.runtime.deserialize_cuda_engine(engine_data)
         self.context = self.engine.create_execution_context()
         
         # 입력/출력 바인딩 설정
@@ -45,7 +47,7 @@ class TRTEngine:
                     'device_mem': device_mem
                 })
         # print(f"\n\tINPUTS: {self.inputs}\n")
-    
+
     def infer(self, input_data):
         """추론 실행"""
         # 중요: 입력 텐서 shape 설정
@@ -64,9 +66,39 @@ class TRTEngine:
             host_mem = np.empty(output['shape'], dtype=output['dtype'])
             cuda.memcpy_dtoh(host_mem, output['device_mem'])
             outputs.append(host_mem)
-        
+
         return outputs
-    
+
+    def free(self) -> None:
+        """GPU 메모리와 TensorRT 객체를 명시적으로 해제한다."""
+        cleanup_errors: list[str] = []
+
+        for buffer in [*self.inputs, *self.outputs]:
+            device_mem = buffer.get("device_mem")
+            if device_mem is None:
+                continue
+            try:
+                device_mem.free()
+            except Exception as exc:
+                tensor_name = buffer.get("name", "<unknown>")
+                cleanup_errors.append(
+                    f"{tensor_name} device memory free failed: {exc}"
+                )
+            finally:
+                buffer["device_mem"] = None
+
+        self.bindings.clear()
+        self.inputs.clear()
+        self.outputs.clear()
+        self.context = None
+        self.engine = None
+        self.runtime = None
+
+        if cleanup_errors:
+            message = "; ".join(cleanup_errors)
+            logging.error("TRTEngine cleanup failed: %s", message)
+            raise RuntimeError(message)
+
 class TRTEngine_async:
     def __init__(self, engine_path):
         self.logger = trt.Logger(trt.Logger.WARNING)
