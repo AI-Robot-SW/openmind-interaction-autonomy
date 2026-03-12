@@ -184,11 +184,11 @@ class SegmentationProvider:
         try:
             while self.running:
                 try:
-                    frame: Optional[CameraFrame] = self.camera_provider.data
-                    if frame is not None and frame.frame_cnt != self._last_cnt:
-                        self._last_cnt = frame.frame_cnt
+                    cam_frame = self.camera_provider.data
+                    if cam_frame is not None and cam_frame.frame_cnt != self._last_cnt:
+                        self._last_cnt = cam_frame.frame_cnt
                         with self._lock:
-                            self._data = self._process_frame(frame)
+                            self._data = self._process_frame(cam_frame)
                     else:
                         time.sleep(0.001)
                 except Exception as e:
