@@ -2,7 +2,7 @@
 # Used by: system_hw_test/move_action_hw_test.py
 #
 # Valid action values (MovementAction enum):
-#   - "go to L1"   | "go to L2"   | "go to L3"
+#   - "go to L1"   | "go to L2"   | "go to L3" | "go to L8"
 #   - "slow down"  | "speed up"
 #   - "stand up"   | "stand down" | "damp" | "stop move"
 # Note: "stop move" in connect() is no-op (TODO NavProvider.set_goal(None)); tick() still calls stop_move() when get_next_move() returns None.
@@ -20,11 +20,11 @@ output_interval_sec: 1.0
 repeat_count: 1
 
 # Ordered list: action only (use default interval) or { action, delay_after_sec }
-# Example: stand up → wait 10s → go to L1 → wait 8s → speed up → wait 5s → stand down
+# Example: stand up → wait 10s → go to L8 → wait 8s → speed up → wait 5s → stand down
 sequence:
   - action: "stand up"
     delay_after_sec: 10
-  - action: "go to L1"
+  - action: "go to L8"
     delay_after_sec: 8
   - action: "speed up"
     delay_after_sec: 5

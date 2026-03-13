@@ -22,7 +22,7 @@ Config (YAML):
   repeat_count: 1           # 1 = run sequence once, 2 = twice, 0 = infinite (Ctrl+C to stop)
   sequence:
     - "stand up"                                    # use default delay
-    - { action: "go to L1", delay_after_sec: 10 }  # 10s before next
+    - { action: "go to L8", delay_after_sec: 10 }  # path is chosen inside MoveConnector.connect()
     - { action: "speed up", delay_after_sec: 8 }
     - { action: "stand down", delay_after_sec: 0 }
   Order and delay_after_sec are fully configurable per step.
@@ -30,7 +30,10 @@ Config (YAML):
 
 import argparse
 import asyncio
+import logging
 import sys
+import threading
+import time
 from pathlib import Path
 
 if "__file__" in dir():
@@ -43,7 +46,39 @@ import yaml
 
 from actions import load_action
 from actions.move.interface import MoveInput, MovementAction
-from actions.orchestrator import ActionOrchestrator
+
+
+class ConnectorTickRunner:
+    """Minimal thread runner for connector.tick() used by this HW test."""
+
+    def __init__(self, connector):
+        self._connector = connector
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        if self._thread is not None and self._thread.is_alive():
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._run,
+            daemon=True,
+            name="MoveConnectorTickRunner",
+        )
+        self._thread.start()
+
+    def _run(self) -> None:
+        while not self._stop_event.is_set():
+            try:
+                self._connector.tick()
+            except Exception as e:
+                logging.error("Error in connector tick loop: %s", e)
+                time.sleep(0.1)
+
+    def stop(self) -> None:
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
 
 
 def load_sequence_config(path: Path) -> dict:
@@ -89,8 +124,8 @@ def parse_args():
     return p.parse_args()
 
 
-def build_minimal_config():
-    """Minimal runtime config with only the move action (for orchestrator + tick)."""
+def build_move_connector():
+    """Load and return the move action connector used by this HW test."""
     action = load_action(
         {
             "name": "move",
@@ -99,10 +134,7 @@ def build_minimal_config():
             "config": {},
         }
     )
-    # Orchestrator expects config with agent_actions
-    class MinimalConfig:
-        agent_actions = [action]
-    return MinimalConfig(), action
+    return action.connector
 
 
 async def run_sequence(
@@ -139,6 +171,10 @@ async def run_sequence(
 
 
 def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     args = parse_args()
     config_path = args.config
     if not config_path.is_file():
@@ -169,18 +205,17 @@ def main() -> int:
         except EOFError:
             pass
 
-    minimal_config, agent_action = build_minimal_config()
-    connector = agent_action.connector
-    orchestrator = ActionOrchestrator(minimal_config)
-    orchestrator.start()
+    connector = build_move_connector()
+    tick_runner = ConnectorTickRunner(connector)
+    tick_runner.start()
 
     try:
         asyncio.run(run_sequence(connector, steps, repeat))
     except KeyboardInterrupt:
         print("\nInterrupted.")
     finally:
-        orchestrator.stop()
-        print("Orchestrator stopped. Done.")
+        tick_runner.stop()
+        print("Tick runner stopped. Done.")
     return 0
 
 
