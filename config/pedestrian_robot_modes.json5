@@ -1,0 +1,334 @@
+{
+  // Pedestrian Companion Robot — Multi-Mode Configuration
+  // 4개 모드: conversation, accompany, standby, caution
+  //
+  // 실행:
+  //   python main.py --config pedestrian_robot_modes --mode
+
+  "version": "v1.0.1",
+  "name": "pedestrian_robot",
+  "default_mode": "standby",
+  "allow_manual_switching": true,
+  "mode_memory_enabled": true,
+
+  "api_key": "openmind_free",
+
+  "system_governance": "Here are the laws that govern your actions. Do not violate these laws.\nFirst Law: A robot cannot harm a human or allow a human to come to harm.\nSecond Law: A robot must obey orders from humans, unless those orders conflict with the First Law.\nThird Law: A robot must protect itself, as long as that protection doesn't conflict with the First or Second Law.\nThe First Law is considered the most important, taking precedence over the second and third laws.",
+
+  "system_prompt_examples": "Here are some examples of interactions you might encounter:\n\n1. If a person greets you:\n    Speak: {{'text': 'Hello! How can I assist you today?'}}\n\n2. If a person asks to go to L1:\n    Move: 'go to L1'\n    Speak: {{'text': 'Sure, I will guide you to L1.'}}\n\n3. If a person says 'Slow down':\n    Move: 'slow down'\n    Speak: {{'text': 'Slowing down now.'}}\n\n4. If a person says 'Stop':\n    Move: 'stop move'\n    Speak: {{'text': 'Stopping now. Let me know when you are ready.'}}\n\n5. If a person asks 'How far is it?':\n    Speak: {{'text': 'Let me check the remaining distance for you.'}}",
+
+  "cortex_llm": {
+    "type": "ExaoneOllamaLLM",
+    "config": {
+      "agent_name": "pedestrian_robot",
+      "base_url": "http://{server_ip}:11411",
+      "model": "exaone3.5:7.8b",
+      "temperature": 0.7,
+      "num_ctx": 4096,
+      "timeout": 120,
+      "history_length": 10
+    }
+  },
+
+  "modes": {
+    // ─────────────────────────────────────────────
+    // 1. Standby — 대기 모드 (기본 모드)
+    //    사용자가 다가오면 conversation으로 전환
+    //    move 액션 없음 (제자리 대기)
+    // ─────────────────────────────────────────────
+    "standby": {
+      "display_name": "Standby Mode",
+      "description": "Idle waiting mode. No movement. Transitions to conversation when a person approaches or speaks.",
+      "system_prompt_base": "You are pedestrian_robot in standby mode. You are waiting for a pedestrian to approach.\n- Stay still and conserve energy.\n- If someone speaks to you, greet them warmly.\n- Do NOT move on your own.\n- Respond briefly and wait for further instructions.",
+      "hertz": 0.5,
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "enable_tts_interrupt": true
+          }
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_startup",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Standby mode activated. Waiting for a pedestrian."
+          }
+        },
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Returning to standby. Waiting for a pedestrian."
+          }
+        }
+      ]
+    },
+
+    // ─────────────────────────────────────────────
+    // 2. Conversation — 대화 모드
+    //    사용자와 자유 대화, 목적지 설정 가능
+    //    move 액션 없음 (이동은 accompany에서)
+    // ─────────────────────────────────────────────
+    "conversation": {
+      "display_name": "Conversation Mode",
+      "description": "Free conversation with the pedestrian. Set destination, answer questions. No movement.",
+      "system_prompt_base": "You are pedestrian_robot in conversation mode. You are having a friendly conversation with a pedestrian.\n- Engage in natural, helpful dialogue in Korean or English.\n- You can help set a navigation destination (L1, L2, L3) when asked.\n- Answer questions about directions, distance, and surroundings.\n- Do NOT move — movement happens only in accompany mode.\n- If the user says they want to go somewhere (e.g., 'L1으로 가자', 'take me to L2'), acknowledge and prepare for accompany mode.",
+      "hertz": 0.5,
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        },
+        {
+          "type": "LocationSensor",
+          "config": {
+            "localization_method": "lidar"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "enable_tts_interrupt": true
+          }
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Hello! How can I assist you today?"
+          }
+        }
+      ]
+    },
+
+    // ─────────────────────────────────────────────
+    // 3. Accompany — 동행 모드
+    //    목적지까지 보행자와 함께 이동
+    //    move 액션 전체 (go to L1/L2/L3, slow down, speed up, stop move, stand up/down, damp)
+    // ─────────────────────────────────────────────
+    "accompany": {
+      "display_name": "Accompany Mode",
+      "description": "Navigate with the pedestrian to a destination. Full movement control.",
+      "system_prompt_base": "You are pedestrian_robot in accompany mode. You are guiding a pedestrian to their destination.\n- Navigate to the requested destination (L1, L2, L3).\n- Adjust speed when asked (slow down, speed up).\n- Stop when asked or when you arrive at the destination.\n- Provide updates on remaining distance and status.\n- Be attentive to the pedestrian's pace and comfort.\n- If the pedestrian says 'stop' or 'I want to go back', stop moving and switch to conversation.",
+      "hertz": 0.5,
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        },
+        {
+          "type": "LocationSensor",
+          "config": {
+            "localization_method": "lidar"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "enable_tts_interrupt": true
+          }
+        },
+        {
+          "name": "move",
+          "llm_label": "move",
+          "connector": "motion"
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Let's go! I'll guide you to your destination."
+          }
+        },
+        {
+          "hook_type": "on_exit",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Stopping navigation."
+          }
+        }
+      ]
+    },
+
+    // ─────────────────────────────────────────────
+    // 4. Caution — 주의 모드
+    //    위험 상황 감지 시 진입, 감속/정지만 허용
+    //    move_caution 액션 (slow_down, stop_move만)
+    // ─────────────────────────────────────────────
+    "caution": {
+      "display_name": "Caution Mode",
+      "description": "Safety mode activated when hazards are detected. Only slow down and stop are allowed.",
+      "system_prompt_base": "You are pedestrian_robot in caution mode. A potential hazard has been detected.\n- SAFETY FIRST: You can only slow down or stop. No other movement is allowed.\n- Warn the pedestrian about the detected hazard.\n- If the pedestrian asks to speed up or go to a new destination, explain that it is not safe right now.\n- Only resume normal operation when the hazard is cleared.\n- Speak clearly and calmly to keep the pedestrian informed.",
+      "hertz": 0.5,
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        },
+        {
+          "type": "LocationSensor",
+          "config": {
+            "localization_method": "lidar"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "elevenlabs_tts",
+          "config": {
+            "enable_tts_interrupt": true
+          }
+        },
+        {
+          "name": "move_caution",
+          "llm_label": "move",
+          "connector": "motion"
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Caution! A potential hazard has been detected. Slowing down for safety."
+          }
+        },
+        {
+          "hook_type": "on_exit",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "Hazard cleared. Returning to normal operation."
+          }
+        }
+      ]
+    }
+  },
+
+  "transition_rules": [
+    // Standby → Conversation (사용자가 말을 걸면)
+    {
+      "from_mode": "standby",
+      "to_mode": "conversation",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["hello", "hi", "안녕", "여기요", "도와줘", "help"],
+      "priority": 2,
+      "cooldown_seconds": 3.0
+    },
+
+    // Conversation → Accompany (목적지 이동 요청)
+    {
+      "from_mode": "conversation",
+      "to_mode": "accompany",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["go to", "가자", "이동", "안내", "navigate", "L1", "L2", "L3", "데려다"],
+      "priority": 3,
+      "cooldown_seconds": 5.0
+    },
+
+    // Conversation → Standby (대화 종료 / 비활성)
+    {
+      "from_mode": "conversation",
+      "to_mode": "standby",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["bye", "잘가", "안녕히", "끝", "done", "goodbye"],
+      "priority": 2,
+      "cooldown_seconds": 5.0
+    },
+    {
+      "from_mode": "conversation",
+      "to_mode": "standby",
+      "transition_type": "time_based",
+      "trigger_keywords": [],
+      "priority": 1,
+      "timeout_seconds": 180.0,
+      "cooldown_seconds": 10.0
+    },
+
+    // Accompany → Conversation (도착 또는 정지 요청)
+    {
+      "from_mode": "accompany",
+      "to_mode": "conversation",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["stop", "멈춰", "정지", "도착", "arrived", "그만"],
+      "priority": 2,
+      "cooldown_seconds": 5.0
+    },
+
+    // Accompany → Caution (위험 감지)
+    {
+      "from_mode": "accompany",
+      "to_mode": "caution",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["danger", "위험", "조심", "caution", "obstacle", "장애물"],
+      "priority": 5,
+      "cooldown_seconds": 1.0
+    },
+
+    // Caution → Accompany (위험 해제)
+    {
+      "from_mode": "caution",
+      "to_mode": "accompany",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["safe", "안전", "clear", "resume", "계속", "해제"],
+      "priority": 3,
+      "cooldown_seconds": 5.0
+    },
+
+    // Caution → Conversation (완전 정지 후 대화)
+    {
+      "from_mode": "caution",
+      "to_mode": "conversation",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["stop", "멈춰", "정지", "대화"],
+      "priority": 2,
+      "cooldown_seconds": 5.0
+    },
+
+    // Universal → Standby (리셋)
+    {
+      "from_mode": "*",
+      "to_mode": "standby",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["reset", "restart", "리셋", "초기화"],
+      "priority": 5,
+      "cooldown_seconds": 10.0
+    }
+  ]
+}

@@ -172,7 +172,7 @@ Response format (JSON array only):
 [{"action": "action_name", "params": {"param_name": "value"}}]
 
 Example:
-[{"action": "speak", "params": {"text": "Hello!"}}, {"action": "move", "params": {"action": "forward"}}]
+[{"action": "move", "params": {"action": "go to L1"}}, {"action": "speak", "params": {"action": "Sure, I will guide you to L1."}}]
 """
         return instruction
 
