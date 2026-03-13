@@ -108,6 +108,14 @@ class SegmentationProvider:
             self._thread.join(timeout=2.0)
         self._thread = None
 
+        if self._engine is not None and self._gpu_worker is not None:
+            self._gpu_worker.submit(self._engine.free).result()
+            self._engine = None
+
+        self._last_cnt = -1
+        with self._lock:
+            self._data = None
+
         logging.info("SegmentationProvider stopped")
 
     def _load_engine(self) -> None:
@@ -181,21 +189,19 @@ class SegmentationProvider:
             self._engine = None
             return
 
-        try:
-            while self.running:
-                try:
-                    cam_frame = self.camera_provider.data
-                    if cam_frame is not None and cam_frame.frame_cnt != self._last_cnt:
-                        self._last_cnt = cam_frame.frame_cnt
-                        with self._lock:
-                            self._data = self._process_frame(cam_frame)
-                    else:
-                        time.sleep(0.001)
-                except Exception as e:
-                    logging.error(f"SegmentationProvider: run loop error: {e}")
+        while self.running:
+            try:
+                cam_frame = self.camera_provider.data
+                if (
+                    cam_frame is not None
+                    and cam_frame.frame_cnt != self._last_cnt
+                ):
+                    self._last_cnt = cam_frame.frame_cnt
                     with self._lock:
-                        self._data = None
-        finally:
-            if self._engine is not None and self._gpu_worker is not None:
-                self._gpu_worker.submit(self._engine.free).result()
-            self._engine = None
+                        self._data = self._process_frame(cam_frame)
+                else:
+                    time.sleep(0.001)
+            except Exception as e:
+                logging.error(f"SegmentationProvider: run loop error: {e}")
+                with self._lock:
+                    self._data = None
