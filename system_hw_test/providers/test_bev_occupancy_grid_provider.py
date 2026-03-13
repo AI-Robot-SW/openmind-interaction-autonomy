@@ -49,7 +49,7 @@ def occupancy_to_bgr(grid: np.ndarray) -> np.ndarray:
 def draw_panel(data: dict, scale: int = 8) -> np.ndarray:
     bev_img = data.bev_image
     occ_grid = data.occupancy_grid.data
-    occ_vis = occupancy_to_bgr(np.flipud(occ_grid))
+    occ_vis = occupancy_to_bgr(np.rot90(np.flipud(occ_grid)))
 
     bev_vis = cv2.resize(
         bev_img,
