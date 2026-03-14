@@ -31,6 +31,9 @@ except ImportError:
 
 from .singleton import singleton
 
+# Stop behavior: True = gradual deceleration before StopMove, False = immediate StopMove.
+STOP_MOVE_GRADUAL_DECEL = True
+
 
 @dataclass(frozen=True)
 class OdometryData:
@@ -325,12 +328,12 @@ class UnitreeGo2Provider:
 
     def stop_move(self) -> bool:
         """
-        Stop movement with a short staged deceleration.
+        Stop movement; behavior depends on STOP_MOVE_GRADUAL_DECEL.
 
-        Robot behavior: Reduces the last commanded velocity over a few short
-        steps before issuing the final stop command. This softens the stop just
-        enough to help the robot keep balance without making the response feel
-        sluggish. Does not change posture (stand/sit/damp).
+        If STOP_MOVE_GRADUAL_DECEL is True: short staged deceleration (reduces
+        the last commanded velocity over a few steps, then StopMove). Softens
+        the stop to help balance. If False: immediately calls StopMove with no
+        ramp. Does not change posture (stand/sit/damp).
 
         Returns
         -------
@@ -341,21 +344,19 @@ class UnitreeGo2Provider:
             return False
         try:
             with self._motion_lock:
-                start_vx, start_vy, start_vyaw = self._last_move_command
-
-                if any(abs(v) > 1e-6 for v in (start_vx, start_vy, start_vyaw)):
-                    decel_steps = 8
-                    decel_interval = 0.1
-
-                    # Ramp down quickly to reduce pitch-forward inertia on stop.
-                    for step in range(decel_steps - 1, -1, -1):
-                        ratio = step / decel_steps
-                        self._sport_client.Move(
-                            start_vx * ratio,
-                            start_vy * ratio,
-                            start_vyaw * ratio,
-                        )
-                        time.sleep(decel_interval)
+                if STOP_MOVE_GRADUAL_DECEL:
+                    start_vx, start_vy, start_vyaw = self._last_move_command
+                    if any(abs(v) > 1e-6 for v in (start_vx, start_vy, start_vyaw)):
+                        decel_steps = 8
+                        decel_interval = 0.1
+                        for step in range(decel_steps - 1, -1, -1):
+                            ratio = step / decel_steps
+                            self._sport_client.Move(
+                                start_vx * ratio,
+                                start_vy * ratio,
+                                start_vyaw * ratio,
+                            )
+                            time.sleep(decel_interval)
 
                 code = self._sport_client.StopMove()
                 self._last_move_command = (0.0, 0.0, 0.0)
