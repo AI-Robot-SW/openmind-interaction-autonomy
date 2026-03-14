@@ -1,7 +1,8 @@
+# realsense_camera_bg.py
+
+import time
 import logging
 import threading
-import time
-from typing import Optional
 
 from pydantic import Field
 
@@ -14,7 +15,6 @@ class RealSenseCameraBgConfig(BackgroundConfig):
     width: int = Field(default=640)
     height: int = Field(default=480)
     fps: int = Field(default=30)
-    align_depth_to_color: bool = Field(default=True)
 
 
 class RealSenseCameraBg(Background[RealSenseCameraBgConfig]):
@@ -32,7 +32,6 @@ class RealSenseCameraBg(Background[RealSenseCameraBgConfig]):
             width=self.config.width,
             height=self.config.height,
             fps=self.config.fps,
-            align_depth_to_color=self.config.align_depth_to_color,
         )
         self.realsense_camera_provider.start()
         logging.info(

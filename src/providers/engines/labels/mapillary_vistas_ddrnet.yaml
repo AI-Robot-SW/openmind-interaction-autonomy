@@ -1,0 +1,37 @@
+# Mapillary Vistas → semantic category mapping
+# Model: ddrnet23_fp16_kist-v1-80k
+# Classes: 65 (indices 0–64)
+#
+# Categories:
+#   0: unknown   (default, not listed)
+#   1: driveable
+#   2: person
+#   3: avoid
+#   4: curb
+
+driveable:
+  - 7   # road
+  - 8   # lane marking (general)
+  - 11  # parking
+  - 15  # bike lane
+  - 23  # service lane
+  - 28  # pedestrian area
+  - 41  # crosswalk (plain)
+
+person:
+  - 19  # person
+
+avoid:
+  - 6   # barrier
+  - 13  # wall
+  - 29  # trash can
+  - 30  # bicycle
+  - 52  # car
+  - 54  # motorcycle
+  - 55  # on rails
+  - 57  # bus
+  - 59  # truck
+
+curb:
+  - 2   # curb
+  - 24  # curb cut
