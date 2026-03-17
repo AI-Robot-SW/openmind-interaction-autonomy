@@ -8,7 +8,7 @@ Architecture:
 
 Dependencies:
     - TTSProvider: 오디오 데이터 소스
-    - PyAudio: 오디오 출력 라이브러리
+    - sounddevice: 오디오 출력 라이브러리
 
 Note:
     이 Provider는 Singleton 패턴을 사용하여 시스템 전체에서
@@ -21,7 +21,8 @@ import queue
 import threading
 from typing import Callable, List, Optional
 
-import pyaudio
+import numpy as np
+import sounddevice as sd
 
 from .singleton import singleton
 
@@ -32,7 +33,7 @@ class SpeakerProvider:
     Speaker Provider - 오디오 출력 스트림 관리자.
 
     오디오 데이터를 큐에 저장하고 스피커로 재생합니다.
-    PyAudio를 사용하여 실제 오디오 출력을 처리합니다.
+    sounddevice를 사용하여 실제 오디오 출력을 처리합니다.
 
     Attributes
     ----------
@@ -116,9 +117,8 @@ class SpeakerProvider:
         self._lock = threading.Lock()
         self._playback_thread: Optional[threading.Thread] = None
 
-        # PyAudio 인스턴스
-        self._audio_interface: Optional[pyaudio.PyAudio] = None
-        self._audio_stream: Optional[pyaudio.Stream] = None
+        # sounddevice 출력 스트림
+        self._audio_stream: Optional[sd.OutputStream] = None
 
         logging.info(
             f"SpeakerProvider initialized: rate={sample_rate}, "
@@ -208,28 +208,12 @@ class SpeakerProvider:
             출력 가능한 디바이스 정보 리스트
         """
         devices = []
-        audio_interface = None
-
         try:
-            # 임시 PyAudio 인스턴스 생성 (running 상태가 아닐 수 있음)
-            if self._audio_interface:
-                audio_interface = self._audio_interface
-            else:
-                audio_interface = pyaudio.PyAudio()
-
-            for i in range(audio_interface.get_device_count()):
-                info = audio_interface.get_device_info_by_index(i)
-                # 출력 채널이 있는 디바이스만 포함
-                if info.get("maxOutputChannels", 0) > 0:
+            for i, info in enumerate(sd.query_devices()):
+                if info.get("max_output_channels", 0) > 0:
                     devices.append(info)
-
         except Exception as e:
             logging.error(f"Failed to get available devices: {e}")
-        finally:
-            # 임시로 생성한 경우에만 종료
-            if audio_interface and audio_interface != self._audio_interface:
-                audio_interface.terminate()
-
         return devices
 
     def _find_device_by_name(self, name: str) -> Optional[int]:
@@ -246,12 +230,9 @@ class SpeakerProvider:
         Optional[int]
             디바이스 인덱스, 찾지 못하면 None
         """
-        if not self._audio_interface:
-            return None
-
-        for i in range(self._audio_interface.get_device_count()):
-            info = self._audio_interface.get_device_info_by_index(i)
-            if name.lower() in info["name"].lower() and info["maxOutputChannels"] > 0:
+        name_l = name.lower()
+        for i, info in enumerate(sd.query_devices()):
+            if name_l in info["name"].lower() and info.get("max_output_channels", 0) > 0:
                 logging.info(f"Found output device: {info['name']} (index {i})")
                 return i
 
@@ -361,7 +342,7 @@ class SpeakerProvider:
     def _playback_loop(self) -> None:
         """
         재생 루프 (별도 스레드에서 실행).
-        PyAudio 스트림을 통해 오디오 데이터를 출력합니다.
+        sounddevice 스트림을 통해 오디오 데이터를 출력합니다.
         """
         while self.running:
             try:
@@ -384,25 +365,43 @@ class SpeakerProvider:
                 if self._volume < 1.0:
                     audio_data = self._apply_volume(audio_data)
 
-                # PyAudio 스트림에 쓰기
-                if self._audio_stream and self._audio_stream.is_active():
+                # sounddevice 스트림에 쓰기
+                if self._audio_stream and self._audio_stream.active:
                     try:
-                        # 청크 단위로 분할하여 쓰기
-                        bytes_per_frame = self.channels * 2  # PCM16 = 2 bytes per sample
-                        chunk_size = self.buffer_size * bytes_per_frame
+                        # bytes → numpy int16 배열 변환 (입력은 mono)
+                        audio_array = np.frombuffer(audio_data, dtype=np.int16)
 
+                        # 리샘플링: TTS 출력(24000Hz) → 스피커(48000Hz) 등 정수배 업샘플링
+                        tts_rate = 24000
+                        if self.sample_rate != tts_rate and self.sample_rate % tts_rate == 0:
+                            ratio = self.sample_rate // tts_rate
+                            audio_array = np.repeat(audio_array, ratio)
+
+                        # mono → stereo 변환
+                        if self.channels > 1:
+                            audio_array = np.column_stack([audio_array] * self.channels)
+
+                        # 청크 단위로 분할하여 쓰기
                         offset = 0
-                        while offset < len(audio_data) and self.running:
+                        total_frames = len(audio_array) if self.channels == 1 else audio_array.shape[0]
+                        while offset < total_frames and self.running:
                             if self._should_stop:
                                 break
 
-                            chunk = audio_data[offset : offset + chunk_size]
+                            end = min(offset + self.buffer_size, total_frames)
+                            chunk = audio_array[offset:end]
+
                             # 청크가 부족하면 패딩
-                            if len(chunk) < chunk_size:
-                                chunk = chunk + bytes(chunk_size - len(chunk))
+                            remaining = self.buffer_size - (end - offset)
+                            if remaining > 0:
+                                if self.channels > 1:
+                                    pad = np.zeros((remaining, self.channels), dtype=np.int16)
+                                else:
+                                    pad = np.zeros(remaining, dtype=np.int16)
+                                chunk = np.concatenate([chunk, pad])
 
                             self._audio_stream.write(chunk)
-                            offset += chunk_size
+                            offset += self.buffer_size
 
                     except Exception as e:
                         logging.error(f"Error writing to audio stream: {e}")
@@ -449,7 +448,7 @@ class SpeakerProvider:
     def start(self) -> None:
         """
         오디오 출력 스트림 시작.
-        PyAudio를 초기화하고 출력 스트림을 엽니다.
+        sounddevice를 초기화하고 출력 스트림을 엽니다.
         """
         if self.running:
             logging.warning("SpeakerProvider is already running")
@@ -458,32 +457,30 @@ class SpeakerProvider:
         self.running = True
         self._should_stop = False
 
-        # PyAudio 초기화
+        # sounddevice 초기화
         try:
-            self._audio_interface = pyaudio.PyAudio()
-
             # 디바이스 찾기
             device_index = self.device_id
             if device_index is None and self.device_name:
                 device_index = self._find_device_by_name(self.device_name)
 
             # 출력 스트림 열기
-            self._audio_stream = self._audio_interface.open(
-                format=pyaudio.paInt16,
+            self._audio_stream = sd.OutputStream(
+                samplerate=self.sample_rate,
+                blocksize=self.buffer_size,
+                device=device_index,
                 channels=self.channels,
-                rate=self.sample_rate,
-                output=True,
-                output_device_index=device_index,
-                frames_per_buffer=self.buffer_size,
+                dtype="int16",
             )
+            self._audio_stream.start()
 
             logging.info(
-                f"PyAudio stream opened: rate={self.sample_rate}, "
+                f"sounddevice stream opened: rate={self.sample_rate}, "
                 f"channels={self.channels}, buffer={self.buffer_size}"
             )
 
         except Exception as e:
-            logging.error(f"Failed to initialize PyAudio: {e}")
+            logging.error(f"Failed to initialize sounddevice: {e}")
             self.running = False
             return
 
@@ -497,7 +494,7 @@ class SpeakerProvider:
     def stop(self) -> None:
         """
         오디오 출력 스트림 정지.
-        PyAudio 스트림을 닫고 리소스를 해제합니다.
+        sounddevice 스트림을 닫고 리소스를 해제합니다.
         """
         if not self.running:
             logging.warning("SpeakerProvider is not running")
@@ -511,22 +508,14 @@ class SpeakerProvider:
         if self._playback_thread and self._playback_thread.is_alive():
             self._playback_thread.join(timeout=2.0)
 
-        # PyAudio 스트림 닫기
+        # sounddevice 스트림 닫기
         if self._audio_stream:
             try:
-                self._audio_stream.stop_stream()
+                self._audio_stream.stop()
                 self._audio_stream.close()
             except Exception as e:
                 logging.error(f"Error closing audio stream: {e}")
             self._audio_stream = None
-
-        # PyAudio 종료
-        if self._audio_interface:
-            try:
-                self._audio_interface.terminate()
-            except Exception as e:
-                logging.error(f"Error terminating PyAudio: {e}")
-            self._audio_interface = None
 
         self._notify_playback_state("stopped")
         logging.info("SpeakerProvider stopped")

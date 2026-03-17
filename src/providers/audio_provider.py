@@ -10,7 +10,7 @@ Architecture:
               STTProvider (오디오 데이터 전달)
 
 Dependencies:
-    - pyaudio: 오디오 스트림 처리
+    - sounddevice: 오디오 스트림 처리
     - SileroVAD (vad.py): 음성 활동 감지
 
 Note:
@@ -25,7 +25,8 @@ import struct
 import threading
 from typing import Callable, Dict, List, Optional
 
-import pyaudio
+import numpy as np
+import sounddevice as sd
 
 from .singleton import singleton
 from .vad import SileroVAD
@@ -105,9 +106,8 @@ class AudioProvider:
         self._chunk_ms = (self.chunk_size / self.sample_rate) * 1000.0
         self.initialize_audio_buffer(buffer_duration_ms=self.buffer_duration_ms)
 
-        # PyAudio (lazy init in start_stream)
-        self._pa: Optional[pyaudio.PyAudio] = None
-        self._stream: Optional[pyaudio.Stream] = None
+        # sounddevice (lazy init in start_stream)
+        self._stream: Optional[sd.InputStream] = None
 
         # VAD 엔진
         self._vad_engine: Optional[SileroVAD] = None
@@ -159,16 +159,18 @@ class AudioProvider:
     # ---- Device resolution ----
 
     def _resolve_device_index(self) -> Optional[int]:
-        """device_id 또는 device_name으로 PyAudio 입력 디바이스 검색."""
+        """device_id 또는 device_name으로 sounddevice 입력 디바이스 검색."""
         if self.device_id is not None:
             return self.device_id
-        if not self.device_name or self._pa is None:
+        if not self.device_name:
             return None
         name_l = self.device_name.lower()
-        for idx in range(self._pa.get_device_count()):
-            info = self._pa.get_device_info_by_index(idx)
+        devices = sd.query_devices()
+        for idx, info in enumerate(devices):
             dev_name = str(info.get("name", "")).lower()
-            if name_l in dev_name and int(info.get("maxInputChannels", 0)) > 0:
+            max_in = int(info.get("max_input_channels", 0))
+            if name_l in dev_name and max_in > 0:
+                logging.info("AudioProvider resolved device_name '%s' -> index %d", self.device_name, idx)
                 return idx
         logging.warning("AudioProvider device_name not found: %s", self.device_name)
         return None
@@ -201,8 +203,16 @@ class AudioProvider:
 
     # ---- Audio data handling ----
 
-    def _fill_buffer(self, in_data, frame_count, time_info, status_flags):
-        """PyAudio stream callback — 오디오 저장 및 처리."""
+    def _fill_buffer(self, indata: np.ndarray, frames: int, time_info, status) -> None:
+        """sounddevice stream callback — 오디오 저장 및 처리."""
+        if status:
+            logging.warning("AudioProvider stream status: %s", status)
+
+        # numpy int16 배열 → mono 변환 후 bytes
+        # sounddevice 콜백의 indata는 non-contiguous view이므로 .copy() 필요
+        mono = indata[:, 0].copy()
+        in_data = mono.tobytes()
+
         # 오디오 버퍼에 저장 (가득 차면 오래된 청크를 버리고 최신 유지)
         try:
             self._audio_buffer.put_nowait(in_data)
@@ -224,11 +234,9 @@ class AudioProvider:
         # 등록된 콜백 호출
         for callback in list(self._audio_callbacks):
             try:
-                callback(in_data, frame_count, time_info, status_flags)
+                callback(in_data, frames, time_info, status)
             except Exception as e:
                 logging.error("Audio callback error: %s", e)
-
-        return (None, pyaudio.paContinue)
 
     def _update_audio_level(self, audio_chunk: bytes) -> None:
         if not audio_chunk:
@@ -322,22 +330,19 @@ class AudioProvider:
             logging.info("AudioProvider started in remote_input mode")
             return
 
-        self._pa = pyaudio.PyAudio()
         device_index = self._resolve_device_index()
         try:
-            self._stream = self._pa.open(
-                format=pyaudio.paInt16,
+            self._stream = sd.InputStream(
+                samplerate=self.sample_rate,
+                blocksize=self.chunk_size,
+                device=device_index,
                 channels=self.channels,
-                rate=self.sample_rate,
-                input=True,
-                frames_per_buffer=self.chunk_size,
-                input_device_index=device_index,
-                stream_callback=self._fill_buffer,
+                dtype="int16",
+                callback=self._fill_buffer,
             )
+            self._stream.start()
         except Exception:
-            if self._pa is not None:
-                self._pa.terminate()
-                self._pa = None
+            self._stream = None
             raise
 
         self.running = True
@@ -358,16 +363,10 @@ class AudioProvider:
 
         if self._stream is not None:
             try:
-                self._stream.stop_stream()
+                self._stream.stop()
                 self._stream.close()
             finally:
                 self._stream = None
-
-        if self._pa is not None:
-            try:
-                self._pa.terminate()
-            finally:
-                self._pa = None
 
         logging.info("AudioProvider stopped")
 
