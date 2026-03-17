@@ -21,7 +21,7 @@ from pydantic import Field
 from actions.base import ActionConfig, ActionConnector
 from actions.speak.interface import SpeakInput
 
-from providers.tts_provider import TTSProvider
+from providers.tts_provider import TTSBackend, TTSProvider
 from providers.speaker_provider import SpeakerProvider
 
 
@@ -33,10 +33,15 @@ class SpeakConnectorConfig(ActionConfig):
     ----------
     enable_tts_interrupt : bool
         새 발화 시 현재 재생을 중단할지 여부
+    tts_backend : str
+        TTS 백엔드 종류 ("naver_clova", "elevenlabs", etc.)
     """
 
     enable_tts_interrupt: bool = Field(
         default=True, description="새 발화 시 현재 재생을 중단할지 여부"
+    )
+    tts_backend: Optional[str] = Field(
+        default=None, description="TTS 백엔드 종류 (naver_clova, elevenlabs, etc.)"
     )
 
 
@@ -51,7 +56,15 @@ class SpeakConnector(ActionConnector[SpeakConnectorConfig, SpeakInput]):
     def __init__(self, config: SpeakConnectorConfig):
         super().__init__(config)
 
-        self._tts_provider = TTSProvider()
+        # config에서 tts_backend가 지정되면 TTSProvider에 전달
+        tts_kwargs = {}
+        if config.tts_backend:
+            try:
+                tts_kwargs["backend"] = TTSBackend(config.tts_backend)
+            except ValueError:
+                logging.warning(f"Unknown TTS backend: {config.tts_backend}, using default")
+
+        self._tts_provider = TTSProvider(**tts_kwargs)
         self._speaker_provider = SpeakerProvider()
 
         self.tts_enabled = True

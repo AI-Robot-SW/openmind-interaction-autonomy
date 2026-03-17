@@ -69,7 +69,10 @@ class ActionOrchestrator:
         done_promises = []
         for promise in self.promise_queue:
             if promise.done():
-                await promise
+                try:
+                    await promise
+                except Exception as e:
+                    logging.warning(f"Action promise failed: {e}")
                 done_promises.append(promise)
         self.promise_queue = [p for p in self.promise_queue if p not in done_promises]
         return done_promises, self.promise_queue
