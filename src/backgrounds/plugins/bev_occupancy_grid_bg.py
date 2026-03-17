@@ -1,6 +1,8 @@
+# bev_occupancy_grid_bg.py
+
+import time
 import logging
 import threading
-import time
 from typing import Optional
 
 from pydantic import Field
@@ -10,29 +12,6 @@ from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
 
 
 class BEVOccupancyGridConfig(BackgroundConfig):
-    """
-    Configuration for BEV Occupancy Grid Background.
-
-    Parameters
-    ----------
-    res : Optional[float]
-        Resolution of the grid in meters per pixel (default: 0.05).
-    width : Optional[int]
-        Width of the grid in pixels (default: 50).
-    height : Optional[int]
-        Height of the grid in pixels (default: 60).
-    origin_x : Optional[float]
-        X origin of the grid in meters (default: 0.0).
-    origin_y : Optional[float]
-        Y origin of the grid in meters (default: -1.5).
-    dx : Optional[float]
-        X offset for coordinate transformation (default: -0.34).
-    dy : Optional[float]
-        Y offset for coordinate transformation (default: 0.0).
-    closing_kernel_size : Optional[int]
-        Size of morphological closing kernel (default: 1).
-    """
-
     res: Optional[float] = Field(
         default=0.05, description="Resolution of the grid in meters per pixel"
     )
@@ -67,14 +46,6 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
     """
 
     def __init__(self, config: BEVOccupancyGridConfig):
-        """
-        Initialize the BEV Occupancy Grid Background.
-
-        Parameters
-        ----------
-        config : BEVOccupancyGridConfig
-            Configuration for the background task.
-        """
         super().__init__(config)
 
         res = self.config.res or 0.05
