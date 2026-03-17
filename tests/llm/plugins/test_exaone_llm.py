@@ -2,7 +2,42 @@
 Tests for EXAONE LLM implementations (Ollama and vLLM backends).
 """
 
+import sys
 from unittest.mock import AsyncMock, MagicMock, patch
+
+# Mock problematic modules BEFORE importing anything else
+sys.modules['zenoh'] = MagicMock()
+sys.modules['providers.io_provider'] = MagicMock()
+sys.modules['providers.io_provider'].IOProvider = MagicMock
+sys.modules['providers.context_provider'] = MagicMock()
+sys.modules['providers.examples.avatar_provider'] = MagicMock()
+
+
+def _passthrough_decorator(*args, **kwargs):
+    """Passthrough decorator that returns the function unchanged."""
+    def decorator(func):
+        return func
+    if args and callable(args[0]):
+        return args[0]
+    return decorator
+
+
+# Create proper mocks for AvatarLLMState and LLMHistoryManager
+# so their decorators don't wrap async methods into MagicMocks
+mock_avatar_llm_state = MagicMock()
+mock_avatar_llm_state.trigger_thinking = _passthrough_decorator
+
+mock_llm_history_manager = MagicMock()
+mock_llm_history_manager.update_history = _passthrough_decorator
+
+mock_avatar_module = MagicMock()
+mock_avatar_module.AvatarLLMState = mock_avatar_llm_state
+
+mock_history_module = MagicMock()
+mock_history_module.LLMHistoryManager = mock_llm_history_manager
+
+sys.modules['providers.examples.avatar_llm_state_provider'] = mock_avatar_module
+sys.modules['providers.examples.llm_history_manager'] = mock_history_module
 
 import pytest
 from pydantic import BaseModel
@@ -61,20 +96,12 @@ def mock_ollama_response():
 
 
 @pytest.fixture
-def mock_ollama_response_with_tool_calls():
-    """Mock Ollama API response with tool calls."""
+def mock_ollama_response_with_json_actions():
+    """Mock Ollama API response with JSON-formatted actions in content."""
     return {
         "message": {
             "role": "assistant",
-            "content": "",
-            "tool_calls": [
-                {
-                    "function": {
-                        "name": "speak",
-                        "arguments": {"text": "Hello world"},
-                    }
-                }
-            ],
+            "content": '[{"action": "speak", "params": {"text": "Hello world"}}]',
         }
     }
 
@@ -115,34 +142,12 @@ def mock_vllm_response_with_tool_calls():
 
 @pytest.fixture(autouse=True)
 def mock_avatar_components():
-    """Mock Avatar/IO components to prevent Zenoh session creation."""
+    """Mock Avatar/IO components to prevent Zenoh session creation.
 
-    def mock_decorator(func=None):
-        def decorator(f):
-            return f
-
-        if func is not None:
-            return decorator(func)
-        return decorator
-
-    with (
-        patch(
-            "llm.plugins.exaone_llm.AvatarLLMState.trigger_thinking", mock_decorator
-        ),
-        patch("llm.plugins.exaone_llm.AvatarLLMState") as mock_avatar_state,
-        patch("llm.plugins.exaone_llm.LLMHistoryManager") as mock_history_manager,
-        patch("providers.examples.avatar_provider.AvatarProvider") as mock_avatar_provider,
-    ):
-        mock_avatar_state._instance = None
-        mock_avatar_state._lock = None
-
-        mock_provider_instance = MagicMock()
-        mock_provider_instance.running = False
-        mock_provider_instance.session = None
-        mock_provider_instance.stop = MagicMock()
-        mock_avatar_provider.return_value = mock_provider_instance
-
-        yield
+    Note: AvatarLLMState and LLMHistoryManager are already mocked via
+    sys.modules at the top of this file with passthrough decorators.
+    """
+    yield
 
 
 # =============================================================================
@@ -213,10 +218,10 @@ class TestExaoneOllamaLLM:
     @patch("llm.plugins.exaone_llm.httpx.AsyncClient")
     @patch("llm.plugins.exaone_llm.openai.AsyncClient")
     @patch("llm.plugins.exaone_llm.LLMHistoryManager")
-    def test_convert_tools_to_ollama_format(
+    def test_build_json_response_instruction(
         self, mock_history_manager, mock_openai_client, mock_httpx_client, ollama_config
     ):
-        """Test tool schema conversion to Ollama format."""
+        """Test JSON response instruction generation for prompt-based tool calling."""
         llm = ExaoneOllamaLLM(ollama_config)
 
         # Set function schemas manually
@@ -235,27 +240,27 @@ class TestExaoneOllamaLLM:
             }
         ]
 
-        tools = llm._convert_tools_to_ollama_format()
-        assert len(tools) == 1
-        assert tools[0]["type"] == "function"
-        assert tools[0]["function"]["name"] == "speak"
+        instruction = llm._build_json_response_instruction()
+        assert "speak" in instruction
+        assert "JSON" in instruction
+        assert "action" in instruction
 
     @pytest.mark.asyncio
     @patch("llm.plugins.exaone_llm.httpx.AsyncClient")
     @patch("llm.plugins.exaone_llm.openai.AsyncClient")
     @patch("llm.plugins.exaone_llm.LLMHistoryManager")
-    async def test_ask_with_tool_calls(
+    async def test_ask_with_json_actions(
         self,
         mock_history_manager,
         mock_openai_client,
         mock_httpx_client_class,
         ollama_config,
-        mock_ollama_response_with_tool_calls,
+        mock_ollama_response_with_json_actions,
     ):
-        """Test ask method with tool calls response."""
+        """Test ask method with JSON-formatted actions in content."""
         mock_response = MagicMock()
         mock_response.status_code = 200
-        mock_response.json.return_value = mock_ollama_response_with_tool_calls
+        mock_response.json.return_value = mock_ollama_response_with_json_actions
 
         mock_client = MagicMock()
         mock_client.post = AsyncMock(return_value=mock_response)

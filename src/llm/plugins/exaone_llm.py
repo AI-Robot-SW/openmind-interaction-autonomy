@@ -18,8 +18,7 @@ from pydantic import BaseModel, Field
 from llm import LLM, LLMConfig
 from llm.function_schemas import convert_function_calls_to_actions
 from llm.output_model import CortexOutputModel
-from providers.examples.avatar_llm_state_provider import AvatarLLMState
-from providers.examples.llm_history_manager import LLMHistoryManager
+from providers.llm_history_manager import LLMHistoryManager
 
 R = T.TypeVar("R", bound=BaseModel)
 
@@ -119,10 +118,10 @@ class ExaoneOllamaLLM(LLM[R]):
 
         self._client = httpx.AsyncClient(timeout=config.timeout)
 
-        # Initialize history manager with httpx client wrapper
+        # Initialize history manager with Ollama-compatible OpenAI client
         self._openai_client = openai.AsyncClient(
-            base_url="https://api.openai.com/v1",
-            api_key="placeholder",
+            base_url=f"{config.base_url}/v1",
+            api_key="ollama",
         )
         self.history_manager = LLMHistoryManager(self._config, self._openai_client)
 
@@ -165,6 +164,7 @@ class ExaoneOllamaLLM(LLM[R]):
         instruction = """
 
 Respond ONLY with a JSON array of actions. No other text.
+IMPORTANT: Always include BOTH a "move" action AND a "speak" action. Never omit either one.
 Available actions:
 """ + "\n".join(actions_desc) + """
 
@@ -216,7 +216,6 @@ Example:
             logging.debug(f"Raw JSON string: {json_str}")
             return []
 
-    @AvatarLLMState.trigger_thinking()
     @LLMHistoryManager.update_history()
     async def ask(
         self, prompt: str, messages: T.List[T.Dict[str, str]] = []
@@ -244,8 +243,9 @@ Example:
             logging.info(f"ExaoneOllama input: {prompt}")
             logging.debug(f"ExaoneOllama messages: {messages}")
 
-            self.io_provider.llm_start_time = time.time()
-            self.io_provider.set_llm_prompt(prompt)
+            if self.io_provider is not None:
+                self.io_provider.llm_start_time = time.time()
+                self.io_provider.set_llm_prompt(prompt)
 
             # Add JSON response instruction to prompt
             json_instruction = self._build_json_response_instruction()
@@ -283,7 +283,8 @@ Example:
                 return None
 
             result = response.json()
-            self.io_provider.llm_end_time = time.time()
+            if self.io_provider is not None:
+                self.io_provider.llm_end_time = time.time()
 
             logging.debug(f"Ollama response: {json.dumps(result, indent=2)}")
 
@@ -449,7 +450,6 @@ class ExaoneVllmLLM(LLM[R]):
         logging.info(f"ExaoneVllmLLM initialized with model: {config.model}")
         logging.info(f"vLLM endpoint: {base_url}")
 
-    @AvatarLLMState.trigger_thinking()
     @LLMHistoryManager.update_history()
     async def ask(
         self, prompt: str, messages: T.List[T.Dict[str, T.Any]] = []
@@ -473,8 +473,9 @@ class ExaoneVllmLLM(LLM[R]):
             logging.info(f"ExaoneVllm input: {prompt}")
             logging.debug(f"ExaoneVllm messages: {messages}")
 
-            self.io_provider.llm_start_time = time.time()
-            self.io_provider.set_llm_prompt(prompt)
+            if self.io_provider is not None:
+                self.io_provider.llm_start_time = time.time()
+                self.io_provider.set_llm_prompt(prompt)
 
             formatted = [
                 {"role": m.get("role", "user"), "content": m.get("content", "")}
@@ -505,7 +506,8 @@ class ExaoneVllmLLM(LLM[R]):
                 return None
 
             message = response.choices[0].message
-            self.io_provider.llm_end_time = time.time()
+            if self.io_provider is not None:
+                self.io_provider.llm_end_time = time.time()
 
             tool_calls = list(message.tool_calls or [])
 
