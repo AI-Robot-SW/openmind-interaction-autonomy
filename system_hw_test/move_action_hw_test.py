@@ -4,8 +4,8 @@ Move action × real HW test — LLM output mocking.
 
 Overview
 --------
-- connect(): 상위 목표만 설정 (예: set_goal("L1"), stand_up). 실제 이동/속도 명령은 안 보냄.
-- tick(): 주기적으로 get_next_move() → (vx, vy, vyaw) 또는 None → move() / stop_move() 로 로봇 구동.
+- connect(): 상위 목표만 설정 (예: set_goal("L8"), stand_up). 실제 이동/속도 명령은 안 보냄.
+- tick(): 주기적으로 get_next_move() → (vx, vy, vyaw) → move() / stop_move() 로 로봇 구동.
 
 이 스크립트는:
 1. YAML 시퀀스를 읽어서, 정해진 주기(output_interval_sec)마다 connect(MoveInput(...))만 호출 (LLM 출력 모사).
@@ -42,10 +42,23 @@ if "__file__" in dir():
     if str(_src) not in sys.path:
         sys.path.insert(0, str(_src))
 
+import serial
 import yaml
 
 from actions import load_action
 from actions.move.interface import MoveInput, MovementAction
+from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
+from providers.distmap_provider import DistMapProvider
+from providers.dwa_route_provider import DwaRouteProvider
+from providers.gnss_route_provider import GnssRouteProvider
+from providers.location_provider import LocationProvider
+from providers.navigation_provider import NavigationProvider
+from providers.pointcloud_provider import PointCloudProvider
+from providers.realsense_camera_provider import RealSenseCameraProvider
+from providers.rtk_provider import RtkProvider
+from providers.segmentation_provider import SegmentationProvider
+from providers.unitree_go2_provider import UnitreeGo2Provider
+from providers.uwb_provider import UwbProvider
 
 
 class ConnectorTickRunner:
@@ -121,7 +134,102 @@ def parse_args():
         action="store_true",
         help="Skip any confirmation prompts.",
     )
+    # Hardware connection args
+    p.add_argument("--ethernet", default="eno1", help="Unitree Go2 Ethernet channel (e.g. eth0).")
+    p.add_argument("--gnss-port", default="/dev/gps", help="GNSS serial port.")
+    p.add_argument("--gnss-baud", type=int, default=115200, help="GNSS serial baudrate.")
+    p.add_argument("--uwb-port", default=None, help="UWB serial port. Omit to run without UWB.")
+    p.add_argument("--uwb-baud", type=int, default=115200, help="UWB serial baudrate.")
+    p.add_argument("--ntrip-caster", default="rts2.ngii.go.kr", help="NTRIP caster host.")
+    p.add_argument("--ntrip-port", type=int, default=2101, help="NTRIP caster port.")
+    p.add_argument("--ntrip-mountpoint", default="VRS-RTCM32", help="NTRIP mountpoint.")
+    p.add_argument("--ntrip-user", default="dori0126", help="NTRIP username.")
+    p.add_argument("--ntrip-password", default="ngii", help="NTRIP password.")
+    p.add_argument("--camera-index", type=int, default=0, help="RealSense camera index.")
     return p.parse_args()
+
+
+def setup_providers(args) -> None:
+    """
+    Initialize all provider singletons required by MoveConnector, in dependency order.
+
+    Mirrors what the background stack does when running the full system:
+      UnitreeGo2Bg → LocationBg → RealSenseCameraBg → SegmentationBg
+      → PointCloudBg → BEVOccupancyGridBg → DistMapBg
+      → GnssRouteBg + DwaRouteProviderBg → NavigationProvider
+    """
+    # 1. Robot SDK — required for all posture and move commands
+    unitree = UnitreeGo2Provider(channel=args.ethernet)
+    unitree.start()
+    logging.info("UnitreeGo2Provider started (channel=%r)", args.ethernet)
+
+    # 2. Location (GPS + UWB) — required for GNSS route following
+    gnss_ser = serial.Serial(args.gnss_port, args.gnss_baud, timeout=1.0)
+    rtk = RtkProvider(
+        ser=gnss_ser,
+        measRate_ms=100,
+        caster=args.ntrip_caster,
+        port=args.ntrip_port,
+        mountpoint=args.ntrip_mountpoint,
+        user=args.ntrip_user,
+        password=args.ntrip_password,
+    )
+    if args.uwb_port:
+        uwb_ser = serial.Serial(args.uwb_port, args.uwb_baud, timeout=0.2)
+        uwb = UwbProvider(ser=uwb_ser)
+        logging.info("UwbProvider using port %s", args.uwb_port)
+    else:
+        uwb = type("DummyUwb", (), {
+            "start": lambda s: None,
+            "stop": lambda s: None,
+            "get_record": lambda s: None,
+        })()
+        logging.warning("UWB port not specified — running without UWB")
+    loc = LocationProvider(gnss=rtk, uwb=uwb)
+    loc.start()
+    logging.info("LocationProvider started")
+
+    # 3. Camera → Segmentation → PointCloud — required for BEV obstacle grid
+    RealSenseCameraProvider(camera_index=args.camera_index).start()
+    logging.info("RealSenseCameraProvider started (index=%d)", args.camera_index)
+
+    SegmentationProvider().start()
+    logging.info("SegmentationProvider started")
+
+    PointCloudProvider().start()
+    logging.info("PointCloudProvider started")
+
+    # 4. BEV occupancy grid + distance map — required for DWA obstacle avoidance
+    BEVOccupancyGridProvider().start()
+    logging.info("BEVOccupancyGridProvider started")
+
+    DistMapProvider().start()
+    logging.info("DistMapProvider started")
+
+    # 5. Navigation stack — singleton creation only; start() is deferred to set_path()
+    gnss_route = GnssRouteProvider(waypoints=[])
+    dwa = DwaRouteProvider()
+    NavigationProvider(gnss=gnss_route, dwa=dwa)
+    logging.info("NavigationProvider singleton created")
+
+
+def teardown_providers() -> None:
+    """Stop all providers that were started in setup_providers (reverse order)."""
+    for name, stop_fn in [
+        ("NavigationProvider",       lambda: NavigationProvider().stop()),
+        ("DistMapProvider",          lambda: DistMapProvider().stop()),
+        ("BEVOccupancyGridProvider", lambda: BEVOccupancyGridProvider().stop()),
+        ("PointCloudProvider",       lambda: PointCloudProvider().stop()),
+        ("SegmentationProvider",     lambda: SegmentationProvider().stop()),
+        ("RealSenseCameraProvider",  lambda: RealSenseCameraProvider().stop()),
+        ("LocationProvider",         lambda: LocationProvider().stop()),
+        ("UnitreeGo2Provider",       lambda: UnitreeGo2Provider().stop()),
+    ]:
+        try:
+            stop_fn()
+        except Exception as e:
+            logging.warning("%s stop failed: %s", name, e)
+    logging.info("Providers torn down")
 
 
 def build_move_connector():
@@ -205,6 +313,7 @@ def main() -> int:
         except EOFError:
             pass
 
+    setup_providers(args)
     connector = build_move_connector()
     tick_runner = ConnectorTickRunner(connector)
     tick_runner.start()
@@ -215,6 +324,7 @@ def main() -> int:
         print("\nInterrupted.")
     finally:
         tick_runner.stop()
+        teardown_providers()
         print("Tick runner stopped. Done.")
     return 0
 
