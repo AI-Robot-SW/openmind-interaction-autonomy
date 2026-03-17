@@ -22,8 +22,6 @@ from __future__ import annotations
 import sys
 import time
 import logging
-from dataclasses import dataclass
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 
@@ -36,35 +34,6 @@ from providers.pointcloud_provider import PointCloudProvider, PointCloudFrame
 
 
 # ── 시각화 헬퍼 ───────────────────────────────────────────────────────────────
-
-
-@dataclass
-class CounterStats:
-    first_cnt: Optional[int] = None
-    last_cnt: Optional[int] = None
-    observed_frames: int = 0
-    missed_by_poll: int = 0
-
-    def update(self, frame_cnt: Optional[int]) -> None:
-        if frame_cnt is None:
-            return
-
-        if self.first_cnt is None:
-            self.first_cnt = frame_cnt
-            self.last_cnt = frame_cnt
-            self.observed_frames = 1
-            return
-
-        assert self.last_cnt is not None
-        if frame_cnt == self.last_cnt:
-            return
-
-        if frame_cnt > self.last_cnt + 1:
-            self.missed_by_poll += frame_cnt - self.last_cnt - 1
-
-        self.last_cnt = frame_cnt
-        self.observed_frames += 1
-
 
 def draw_bev(
     frame: PointCloudFrame,
@@ -113,10 +82,6 @@ def draw_bev(
         put(line, 24 + i * 24)
 
     return img
-
-
-def safe_frame_cnt(frame: object) -> Optional[int]:
-    return None if frame is None else int(frame.frame_cnt)
 
 
 # ── 메인 ──────────────────────────────────────────────────────────────────────
@@ -192,38 +157,16 @@ def main() -> int:
     # -------------------------------------------------------------------------
     # Phase 3: Latency stats (3초간 수집)
     # -------------------------------------------------------------------------
-    print(f"\n{'='*60}\n  Phase 3: Latency + sync stats (3s)\n{'='*60}")
+    print(f"\n{'='*60}\n  Phase 3: Latency stats (3s)\n{'='*60}")
     latencies: list[float] = []
-    cam_stats = CounterStats()
-    seg_stats = CounterStats()
-    pc_stats = CounterStats()
-    last_pc_cnt = -1
-    sync_match_polls = 0
-    sync_mismatch_polls = 0
+    last_cnt = -1
     t_end = time.monotonic() + 3.0
 
     while time.monotonic() < t_end:
-        cam_frame = camera_provider.data
-        seg_frame = seg_provider.data
-        pc_frame = pc_provider.data
-
-        cam_cnt = safe_frame_cnt(cam_frame)
-        seg_cnt = safe_frame_cnt(seg_frame)
-        pc_cnt = safe_frame_cnt(pc_frame)
-
-        cam_stats.update(cam_cnt)
-        seg_stats.update(seg_cnt)
-        pc_stats.update(pc_cnt)
-
-        if cam_cnt is not None and seg_cnt is not None:
-            if cam_cnt == seg_cnt:
-                sync_match_polls += 1
-            else:
-                sync_mismatch_polls += 1
-
-        if pc_frame is not None and pc_frame.frame_cnt != last_pc_cnt:
-            last_pc_cnt = pc_frame.frame_cnt
-            latencies.append(pc_frame.latency_s * 1000.0)
+        f = pc_provider.data
+        if f is not None and f.frame_cnt != last_cnt:
+            last_cnt = f.frame_cnt
+            latencies.append(f.latency_s * 1000.0)
         time.sleep(0.005)
 
     if latencies:
@@ -234,36 +177,6 @@ def main() -> int:
         print(f"  max     : {arr.max():.2f} ms")
     else:
         print("  WARN: latency 샘플 수집 실패")
-
-    cam_pc_end_lag = (
-        cam_stats.last_cnt - pc_stats.last_cnt
-        if cam_stats.last_cnt is not None and pc_stats.last_cnt is not None
-        else None
-    )
-    seg_pc_end_lag = (
-        seg_stats.last_cnt - pc_stats.last_cnt
-        if seg_stats.last_cnt is not None and pc_stats.last_cnt is not None
-        else None
-    )
-
-    print(
-        f"  camera observed      : {cam_stats.observed_frames}"
-        f" (poll-missed gaps: {cam_stats.missed_by_poll})"
-    )
-    print(
-        f"  segmentation observed: {seg_stats.observed_frames}"
-        f" (poll-missed gaps: {seg_stats.missed_by_poll})"
-    )
-    print(
-        f"  pointcloud observed  : {pc_stats.observed_frames}"
-        f" (poll-missed gaps: {pc_stats.missed_by_poll})"
-    )
-    print(
-        f"  cam/seg sync polls   : match={sync_match_polls} mismatch={sync_mismatch_polls}"
-    )
-    print(
-        f"  end lag              : cam-pc={cam_pc_end_lag} seg-pc={seg_pc_end_lag}"
-    )
     print("  OK")
 
     # -------------------------------------------------------------------------
