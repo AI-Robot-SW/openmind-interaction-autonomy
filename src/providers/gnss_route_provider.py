@@ -174,6 +174,18 @@ class GnssRouteProvider:
         self._thread = threading.Thread(target=self._run, daemon=True, name="GnssRouteCtrl")
         self._thread.start()
 
+        # 첫 레코드 도착까지 대기 — 반환 후 data가 항상 GnssRouteRecord를 보장
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._data is not None:
+                    break
+            if not self.running:
+                break
+            time.sleep(0.01)
+        else:
+            raise RuntimeError("GnssRouteProvider: timed out waiting for first record")
+
         logging.info("GnssRouteProvider started")
 
     def stop(self) -> None:
