@@ -119,6 +119,7 @@ def run(args):
     from providers.segmentation_provider import SegmentationProvider
     from providers.pointcloud_provider import PointCloudProvider
     from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
+    from providers.distmap_provider import DistMapProvider
 
     rs = RealSenseCameraProvider()
     rs.start()
@@ -131,7 +132,11 @@ def run(args):
 
     bev = BEVOccupancyGridProvider()
     bev.start()
-    logger.info("RealSense → PointCloud → BEV 파이프라인 started")
+    
+    dist = DistMapProvider()
+    dist.start()
+
+    logger.info("RealSense → PointCloud → BEV → DistMap 파이프라인 started")
 
     # BEV 데이터 올라올 때까지 잠시 대기
     for i in range(100):
@@ -257,6 +262,8 @@ def run(args):
         go2.stand_down()
         time.sleep(1.0)
         try: smt.stop()
+        except: pass
+        try: dist.stop()
         except: pass
         try: bev.stop()
         except: pass
