@@ -213,11 +213,11 @@ class DwaRouteProvider:
 
                 # 3) distmap
                 dist_frame = self._dist.data
-                if int(dist_frame.frame_cnt) != int(bev_frame.frame_cnt):
+                if dist_frame is None:
                     rec = DwaRouteRecord(
                             t_monotonic=time.monotonic(),
                             mode="IDLE",
-                            stop_reason="distmap_not_synced",
+                            stop_reason="distmap_unavailable",
                     )
                     with self._lock:
                         self._data = rec
