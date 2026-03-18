@@ -136,7 +136,7 @@ def parse_args():
     )
     # Hardware connection args
     p.add_argument("--ethernet", default="eno1", help="Unitree Go2 Ethernet channel (e.g. eth0).")
-    p.add_argument("--gnss-port", default="/dev/gps", help="GNSS serial port.")
+    p.add_argument("--gnss-port", default="/dev/ttyACM0", help="GNSS serial port.")
     p.add_argument("--gnss-baud", type=int, default=115200, help="GNSS serial baudrate.")
     p.add_argument("--uwb-port", default=None, help="UWB serial port. Omit to run without UWB.")
     p.add_argument("--uwb-baud", type=int, default=115200, help="UWB serial baudrate.")

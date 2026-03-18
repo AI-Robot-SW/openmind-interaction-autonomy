@@ -2,7 +2,7 @@
 # Used by: system_hw_test/move_action_hw_test.py
 #
 # Valid action values (MovementAction enum):
-#   - "go to L1"   | "go to L2"   | "go to L3" | "go to L8"
+#   - "go to L1"   | "go to L2"   | "go to L3" | "go to L8" | "go to NG"
 #   - "slow down"  | "speed up"
 #   - "stand up"   | "stand down" | "damp" | "stop move"
 # Note: "stop move" calls NavigationProvider.clear_path() (경로 초기화 + nav 스레드 정지) and UnitreeGo2Provider.stop_move().
@@ -24,7 +24,7 @@ repeat_count: 1
 sequence:
   - action: "stand up"
     delay_after_sec: 10
-  - action: "go to L8"
+  - action: "go to NG"
     delay_after_sec: 100
   - action: "stop move"
     delay_after_sec: 10

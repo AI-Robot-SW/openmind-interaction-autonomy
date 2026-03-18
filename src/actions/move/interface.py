@@ -5,11 +5,12 @@ from actions.base import Interface
 
 
 class MovementAction(str, Enum):
-    """Navigation goals (L1/L2/L3/L8), speed adjustment, and posture (sit, stand, damp, stop)."""
+    """Navigation goals (L1/L2/L3/L8/NG), speed adjustment, and posture (sit, stand, damp, stop)."""
     GO_TO_L1 = "go to L1"
     GO_TO_L2 = "go to L2"
     GO_TO_L3 = "go to L3"
     GO_TO_L8 = "go to L8"
+    GO_TO_NG = "go to NG"
     SLOW_DOWN = "slow down"
     SPEED_UP = "speed up"
     STAND_UP = "stand up"
@@ -26,7 +27,7 @@ class MoveInput:
     Parameters
     ----------
     action : MovementAction
-        One of: go to L1/L2/L3/L8, slow down, speed up, stand up/down, damp, stop move, sit.
+        One of: go to L1/L2/L3/L8/NG, slow down, speed up, stand up/down, damp, stop move, sit.
     """
 
     action: MovementAction
@@ -37,7 +38,7 @@ class Move(Interface[MoveInput, MoveInput]):
     """
     Move action interface.
 
-    Navigation goals (L1/L2/L3/L8), speed control (slow down / speed up), and posture (sit, stand up/down, damp, stop move).
+    Navigation goals (L1/L2/L3/L8/NG), speed control (slow down / speed up), and posture (sit, stand up/down, damp, stop move).
     """
 
     input: MoveInput

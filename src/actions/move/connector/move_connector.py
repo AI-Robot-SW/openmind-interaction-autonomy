@@ -10,6 +10,7 @@ from providers.unitree_go2_provider import UnitreeGo2Provider
 # Add an entry here when a new destination path file is available.
 _DESTINATION_PATHS: dict[MovementAction, str] = {
     MovementAction.GO_TO_L8: "utils/paths/EntL8-go2-0.75m.txt",
+    MovementAction.GO_TO_NG: "utils/paths/EntNG-go2-0.75m.txt",
 }
 
 # Fixed forward speeds (m/s).  vy is always forced to 0.
@@ -34,7 +35,7 @@ class MoveConfig(ActionConfig):
 class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
     def __init__(self, config: MoveConfig):
         super().__init__(config)
-        self._unitree = UnitreeGo2Provider()
+        self._unitree_provider = UnitreeGo2Provider()
         self._nav_provider = NavigationProvider()
         self._already_stopped = False  # True after first stop_move() in a streak of idles
         logging.info("MoveConnector initialized")
@@ -67,20 +68,20 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
 
         elif action == MovementAction.STAND_UP:
             logging.info("MoveConnector forwarding posture command: stand_up")
-            self._unitree.stand_up()
+            self._unitree_provider.stand_up()
 
         elif action == MovementAction.STAND_DOWN:
             logging.info("MoveConnector forwarding posture command: stand_down")
-            self._unitree.stand_down()
+            self._unitree_provider.stand_down()
 
         elif action == MovementAction.DAMP:
             logging.info("MoveConnector forwarding posture command: damp")
-            self._unitree.damp()
+            self._unitree_provider.damp()
 
         elif action == MovementAction.STOP_MOVE:
             logging.info("MoveConnector forwarding stop command")
             self._nav_provider.clear_path()
-            self._unitree.stop_move()
+            self._unitree_provider.stop_move()
             self._already_stopped = True
 
         else:
@@ -108,10 +109,10 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
                 vyaw,
                 state.mode,
             )
-            self._unitree.move(vx, vy, vyaw)
+            self._unitree_provider.move(vx, vy, vyaw)
             self._already_stopped = False
         else:
             if not self._already_stopped:
                 logging.info("MoveConnector forwarding stop command from tick")
-                self._unitree.stop_move()
+                self._unitree_provider.stop_move()
                 self._already_stopped = True
