@@ -108,7 +108,6 @@ class NavigationProvider:
 
     def __init__(
         self,
-        *,
         gnss: GnssRouteProvider,
         dwa: DwaRouteProvider,
         tick_dt: float = 0.05,
@@ -204,6 +203,12 @@ class NavigationProvider:
         """현재 이동 명령 (vx, vy, vyaw) 을 반환합니다."""
         st = self.get_state()
         return (st.vx, st.vy, st.vyaw)
+
+    def clear_path(self) -> None:
+        """경로를 초기화하고 내비게이션을 중단합니다. 재시작하려면 set_path()를 호출하세요."""
+        self.stop()
+        self._active_path = None
+        logger.info("NavigationProvider.clear_path: path cleared")
 
     def get_active_path(self) -> Optional[PathLike]:
         """현재 설정된 경로를 반환합니다. 경로가 없으면 None을 반환합니다."""
