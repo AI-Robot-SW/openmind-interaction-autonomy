@@ -114,6 +114,7 @@ class NavigationProvider:
         speed_step: float = 0.1,
         speed_min: float = 0.2,
         speed_max: Optional[float] = None,  # None이면 dwa.v_max 사용
+        calibrating_speed: float = 0.5,  # 헤딩 캘리브레이션 중 고정 전진 속도 (m/s)
     ) -> None:
         self._gnss = gnss
         self._dwa = dwa
@@ -121,6 +122,7 @@ class NavigationProvider:
         self._speed_step = float(speed_step)
         self._speed_min = float(speed_min)
         self._speed_max = float(speed_max) if speed_max is not None else float(dwa.v_max)
+        self._calibrating_speed = float(calibrating_speed)
         self._active_path: Optional[PathLike] = None
 
         self._state_lock = threading.Lock()
@@ -304,12 +306,14 @@ class NavigationProvider:
                 else:
                     mode = str(rec.mode)
                     if mode == "DWA":
-                        vx = float(rec.vx_cmd)
+                        # vx_cmd > 0이면 vx_fixed(step_faster/step_slower로 조정 가능)로 override.
+                        # vx_cmd == 0은 turn-in-place 신호이므로 그대로 존중.
+                        vx = float(self._dwa.vx_fixed) if float(rec.vx_cmd) > 1e-6 else 0.0
                         vyaw = float(rec.vyaw_cmd)
                     else:
                         # DWA가 정지 — heading 캘리브레이션 중이면 gnss 명령을 직접 전달
                         if gnss_rec is not None and not gnss_rec.heading_calibrated:
-                            vx = float(gnss_rec.vx)
+                            vx = self._calibrating_speed if float(gnss_rec.vx) > 1e-6 else 0.0
                             vyaw = float(gnss_rec.vyaw)
                             mode = "CALIBRATING"
                         else:

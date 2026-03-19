@@ -67,7 +67,7 @@ class DwaRouteProvider:
         y_bias: float = -0.5,
         obstacle_cost: float = 1e9,
         # person stop
-        person_stop_dist: float = 1.2,
+        person_stop_dist: float = 1.8,
         person_stop_y_width: float = 0.5,
         # window
         ahead_m: float = 2.0,

@@ -13,11 +13,10 @@ _DESTINATION_PATHS: dict[MovementAction, str] = {
     MovementAction.GO_TO_NG: "utils/paths/EntNG-go2-0.75m.txt",
 }
 
-# Fixed forward speeds (m/s).  vy is always forced to 0.
-# During initial heading calibration NavigationProvider emits GnssRoute commands
-# (not DWA), so a slower speed is safer.
-_VX_CALIBRATING = 0.5
-_VX_RUN = 0.8
+# Fixed forward speed during initial heading calibration (NavigationProvider handles
+# run-speed via vx_fixed; this constant is no longer used here but kept for reference).
+# _VX_CALIBRATING = 0.5  (now lives in NavigationProvider as calibrating_speed)
+# _VX_RUN = 0.8          (now lives in DwaRouteProvider as vx_fixed)
 
 
 class MoveConfig(ActionConfig):
@@ -96,12 +95,7 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
             state = None
 
         if state is not None and any(abs(v) > 1e-6 for v in (vx, vy, vyaw)):
-            # vy is always 0 (NavigationProvider already guarantees this, but be explicit)
             vy = 0.0
-            # Override vx with a fixed speed so the robot moves at a predictable pace.
-            # vx == 0 means turn-in-place — respect it and don't force forward motion.
-            if abs(vx) > 1e-6:
-                vx = _VX_CALIBRATING if state.mode == "CALIBRATING" else _VX_RUN
             logging.info(
                 "MoveConnector forwarding move command: vx=%.3f vy=%.3f vyaw=%.3f (mode=%s)",
                 vx,
