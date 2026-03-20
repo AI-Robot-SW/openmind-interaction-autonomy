@@ -36,7 +36,6 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
         super().__init__(config)
         self._unitree_provider = UnitreeGo2Provider()
         self._nav_provider = NavigationProvider()
-        self._already_stopped = False  # True after first stop_move() in a streak of idles
         logging.info("MoveConnector initialized")
 
     async def connect(self, output_interface: MoveInput) -> None:
@@ -55,7 +54,6 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
             path = _DESTINATION_PATHS[action]
             self._nav_provider.set_path(path)
             logging.info("MoveConnector forwarded destination to NavigationProvider.set_path: %s", path)
-            self._already_stopped = False
 
         elif action == MovementAction.SLOW_DOWN:
             logging.info("MoveConnector forwarding speed change: slower")
@@ -79,22 +77,25 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
 
         elif action == MovementAction.STOP_MOVE:
             logging.info("MoveConnector forwarding stop command")
-            self._nav_provider.clear_path()
+            self._nav_provider.pause()
             self._unitree_provider.stop_move()
-            self._already_stopped = True
+
+        elif action == MovementAction.RESUME:
+            logging.info("MoveConnector forwarding resume command")
+            self._nav_provider.resume()
 
         else:
             raise ValueError(f"Unknown move action: {action}")
 
     def tick(self) -> None:
         time.sleep(0.1)
-        if self._nav_provider.running and self._nav_provider.get_active_path() is not None:
-            state = self._nav_provider.get_state()
-            vx, vy, vyaw = state.vx, state.vy, state.vyaw
-        else:
-            state = None
+        if not (self._nav_provider.running and self._nav_provider.get_active_path() is not None):
+            return
 
-        if state is not None and any(abs(v) > 1e-6 for v in (vx, vy, vyaw)):
+        state = self._nav_provider.get_state()
+        vx, vy, vyaw = state.vx, state.vy, state.vyaw
+
+        if any(abs(v) > 1e-6 for v in (vx, vy, vyaw)):
             vy = 0.0
             logging.info(
                 "MoveConnector forwarding move command: vx=%.3f vy=%.3f vyaw=%.3f (mode=%s)",
@@ -104,9 +105,3 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
                 state.mode,
             )
             self._unitree_provider.move(vx, vy, vyaw)
-            self._already_stopped = False
-        else:
-            if not self._already_stopped:
-                logging.info("MoveConnector forwarding stop command from tick")
-                self._unitree_provider.stop_move()
-                self._already_stopped = True

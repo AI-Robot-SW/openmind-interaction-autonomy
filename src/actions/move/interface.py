@@ -17,6 +17,7 @@ class MovementAction(str, Enum):
     STAND_DOWN = "stand down"
     DAMP = "damp"
     STOP_MOVE = "stop move"
+    RESUME = "resume"
 
 
 @dataclass
