@@ -43,7 +43,7 @@ class DwaRouteProviderBgConfig(BackgroundConfig):
     )
     kv: float = Field(default=0.6, description="Reserved forward gain")
     kyaw: float = Field(default=1.0, description="Yaw control gain")
-    v_max: float = Field(default=0.9, description="Maximum forward speed in m/s")
+    v_max: float = Field(default=1.2, description="Maximum forward speed in m/s")
     w_max: float = Field(default=0.75, description="Maximum yaw speed in rad/s")
     v_min: float = Field(default=0.0, description="Minimum forward speed in m/s")
     vx_fixed: float = Field(default=0.8, description="Base forward command in m/s")

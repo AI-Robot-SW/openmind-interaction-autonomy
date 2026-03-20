@@ -60,10 +60,22 @@ class WaypointTracker:
     마지막 waypoint에 도달하면 update()가 None을 반환한다.
     """
 
-    def __init__(self, coords: List[Tuple[float, float]], reach_tol: float = 5.0):
+    def __init__(
+        self,
+        coords: List[Tuple[float, float]],
+        reach_tol: float = 5.0,
+        start_lat: Optional[float] = None,
+        start_lon: Optional[float] = None,
+    ):
         self._coords = coords
         self._reach_tol = reach_tol
-        self._idx = 0
+        if start_lat is not None and start_lon is not None and coords:
+            self._idx = min(
+                range(len(coords)),
+                key=lambda i: math.hypot(*_haversine_xy(start_lat, start_lon, coords[i][0], coords[i][1])),
+            )
+        else:
+            self._idx = 0
 
     @classmethod
     def from_file(cls, path_name: str, reach_tol: float = 5.0) -> "WaypointTracker":
@@ -86,6 +98,10 @@ class WaypointTracker:
 
         logging.info("_WaypointTracker.from_file: %d waypoints loaded from %s", len(coords), p)
         return cls(coords=coords, reach_tol=reach_tol)
+
+    @property
+    def idx(self) -> int:
+        return self._idx
 
     def update(self, lat: float, lon: float) -> Optional[Tuple[float, float]]:
         """현재 위치(lat, lon)를 기준으로 waypoint를 갱신하고 다음 목표를 반환한다. 경로 완료 시 None."""
@@ -260,8 +276,17 @@ class GnssRouteProvider:
         현재 위치와 현재 목표 waypoint 사이의 거리가 reach_tol 이내가 되면
         다음 waypoint로 목표를 갱신한다. 마지막 waypoint에 도달하면 루프를 종료.
         """
-        path = WaypointTracker(self.waypoints, reach_tol=self.reach_tol_m)
-        logging.info("GnssRouteProvider: mission active, following %d waypoints", len(self.waypoints))
+        gnss_init = self.location_provider.get_record().gnss
+        path = WaypointTracker(
+            self.waypoints,
+            reach_tol=self.reach_tol_m,
+            start_lat=gnss_init.lat,
+            start_lon=gnss_init.lon,
+        )
+        logging.info(
+            "GnssRouteProvider: mission active, following %d waypoints from index=%d (%.6f, %.6f)",
+            len(self.waypoints), path.idx, self.waypoints[path.idx][0], self.waypoints[path.idx][1],
+        )
 
         odom_snap = self.unitree_go2_provider.get_odometry()
 
