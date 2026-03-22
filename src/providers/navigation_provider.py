@@ -111,9 +111,10 @@ class NavigationProvider:
         gnss: GnssRouteProvider,
         dwa: DwaRouteProvider,
         tick_dt: float = 0.05,
-        speed_step: float = 0.1,
+        speed_step: float = 0.2,
         speed_min: float = 0.2,
         speed_max: Optional[float] = None,  # None이면 dwa.v_max 사용
+        calibrating_speed: float = 0.5,  # 헤딩 캘리브레이션 중 고정 전진 속도 (m/s)
     ) -> None:
         self._gnss = gnss
         self._dwa = dwa
@@ -121,7 +122,9 @@ class NavigationProvider:
         self._speed_step = float(speed_step)
         self._speed_min = float(speed_min)
         self._speed_max = float(speed_max) if speed_max is not None else float(dwa.v_max)
+        self._calibrating_speed = float(calibrating_speed)
         self._active_path: Optional[PathLike] = None
+        self._speed_before_pause: Optional[float] = None
 
         self._state_lock = threading.Lock()
         self._latest_state = NavigationState(t_monotonic=time.monotonic())
@@ -204,10 +207,23 @@ class NavigationProvider:
         st = self.get_state()
         return (st.vx, st.vy, st.vyaw)
 
+    def pause(self) -> None:
+        """속도를 0으로 설정합니다. 경로와 내비게이션 스레드는 유지됩니다."""
+        self._speed_before_pause = float(self._dwa.vx_fixed)
+        self._dwa.vx_fixed = 0.0
+        logger.info("NavigationProvider.pause: speed %.2f -> 0.0 m/s", self._speed_before_pause)
+
+    def resume(self) -> None:
+        """pause() 이전 속도로 복원합니다. pause() 없이 호출되면 speed_min으로 시작합니다."""
+        target = self._speed_before_pause if self._speed_before_pause is not None else self._speed_min
+        self._dwa.vx_fixed = target
+        logger.info("NavigationProvider.resume: speed 0.0 -> %.2f m/s", target)
+        self._speed_before_pause = None
+
     def clear_path(self) -> None:
-        """경로를 초기화하고 내비게이션을 중단합니다. 재시작하려면 set_path()를 호출하세요."""
-        self.stop()
+        """경로를 초기화합니다. 내비게이션 스레드는 유지됩니다. 완전 종료는 stop()을 호출하세요."""
         self._active_path = None
+        self._gnss.waypoints = []
         logger.info("NavigationProvider.clear_path: path cleared")
 
     def get_active_path(self) -> Optional[PathLike]:
@@ -304,12 +320,14 @@ class NavigationProvider:
                 else:
                     mode = str(rec.mode)
                     if mode == "DWA":
-                        vx = float(rec.vx_cmd)
+                        # vx_cmd > 0이면 vx_fixed(step_faster/step_slower로 조정 가능)로 override.
+                        # vx_cmd == 0은 turn-in-place 신호이므로 그대로 존중.
+                        vx = float(self._dwa.vx_fixed) if float(rec.vx_cmd) > 1e-6 else 0.0
                         vyaw = float(rec.vyaw_cmd)
                     else:
                         # DWA가 정지 — heading 캘리브레이션 중이면 gnss 명령을 직접 전달
                         if gnss_rec is not None and not gnss_rec.heading_calibrated:
-                            vx = float(gnss_rec.vx)
+                            vx = self._calibrating_speed if float(gnss_rec.vx) > 1e-6 else 0.0
                             vyaw = float(gnss_rec.vyaw)
                             mode = "CALIBRATING"
                         else:

@@ -67,7 +67,7 @@ class DwaRouteProvider:
         y_bias: float = -0.5,
         obstacle_cost: float = 1e9,
         # person stop
-        person_stop_dist: float = 1.2,
+        person_stop_dist: float = 1.8,
         person_stop_y_width: float = 0.5,
         # window
         ahead_m: float = 2.0,
@@ -77,7 +77,7 @@ class DwaRouteProvider:
         # speed
         kv: float = 0.6,  # reserved — currently unused (vx_cmd uses vx_fixed directly)
         kyaw: float = 1.0,
-        v_max: float = 0.9,
+        v_max: float = 1.2,
         w_max: float = 0.75,
         v_min: float = 0.0,
         vx_fixed: float = 0.8,
@@ -348,7 +348,7 @@ class DwaRouteProvider:
                     min(float(self.w_max), float(self.kyaw) * theta),
                 )
 
-                vx_cmd = 1.1  # vx_raw
+                vx_cmd = vx_raw
 
                 if self.enable_turn_in_place and abs(theta) > float(self.theta_turn):
                     vx_cmd = 0.0
