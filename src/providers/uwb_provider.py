@@ -1,11 +1,15 @@
 # uwb_provider.py
 
-from __future__ import annotations
-
-import threading
 import time
+import logging
+import threading
+
+import serial
+
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Optional
+
+from .singleton import singleton
 
 
 @dataclass(frozen=True)
@@ -17,60 +21,67 @@ class UwbPosRecord:
     quality_factor: Optional[int]
 
 
+@singleton
 class UwbProvider:
-    def __init__(self, ser, *, write_lock: Optional[threading.RLock] = None) -> None:
-        self.ser = ser
-        self.write_lock = write_lock or threading.RLock()
+    def __init__(
+        self,
+        port: str = "/dev/uwb",
+        baud: int = 115200,
+    ):
+        self._port = port
+        self._baud = baud
+        self.ser: Optional[serial.Serial] = None
 
+        self._write_lock = threading.RLock()
+        self._data: Optional[UwbPosRecord] = None
         self._lock = threading.Lock()
-        self._latest: Optional[UwbPosRecord] = None
 
-        self._stop_evt = threading.Event()
+        self.running = False
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
+            logging.warning("UwbProvider already running")
             return
-        
-        self._stop_evt.clear()
+
+        self.ser = serial.Serial(self._port, self._baud, timeout=0.2)
+
+        self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="UwbReader")
         self._thread.start()
 
+        # 첫 레코드 도착까지 대기 — _cfg_interface가 ~1.2초 소요
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._data is not None:
+                    break
+            time.sleep(0.01)
+        else:
+            raise RuntimeError("UwbProvider: timed out waiting for first record")
+
+        logging.info("UwbProvider started")
+
     def stop(self) -> None:
-        if self._thread is None:
-            return
-        
-        self._stop_evt.set()
-        with self.write_lock:
-            self.ser.write(b"\r")
-            self.ser.flush()
-        self._thread.join(timeout=2.0)
+        self.running = False
 
-        if not self._thread.is_alive():
-            self._thread = None
+        if self.ser is not None:
+            with self._write_lock:
+                self.ser.write(b"\r")
+                self.ser.flush()
 
-    def get_record(self) -> Optional[UwbPosRecord]:
-        with self._lock:
-            return self._latest
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+        self._thread = None
 
-    def get(self) -> Optional[Dict[str, Any]]:
-        rec = self.get_record()
-        if rec is None:
-            return None
-        return {
-            "t_monotonic": rec.t_monotonic,
-            "x_m": rec.x_m,
-            "y_m": rec.y_m,
-            "z_m": rec.z_m,
-            "quality_factor": rec.quality_factor,
-        }
+        if self.ser is not None:
+            self.ser.close()
+            self.ser = None
 
-    def _set_latest(self, rec: UwbPosRecord) -> None:
-        with self._lock:
-            self._latest = rec
+        logging.info("UwbProvider stopped")
 
     def _cfg_interface(self) -> None:
-        with self.write_lock:
+        with self._write_lock:
             self.ser.write(b"\r")
             time.sleep(0.1)
             self.ser.write(b"\r")
@@ -126,20 +137,26 @@ class UwbProvider:
             quality_factor=qf,
         )
 
+    @property
+    def data(self) -> Optional[UwbPosRecord]:
+        """최신 UwbPosRecord. 데이터 수신 전에는 None."""
+        with self._lock:
+            return self._data
+        
     def _run(self) -> None:
         self._cfg_interface()
 
         buf = bytearray()
 
-        while not self._stop_evt.is_set():
+        while self.running:
             chunk = self._read_some()
 
             if not chunk:
-                self._stop_evt.wait(0.01)
+                time.sleep(0.01)
                 continue
             
             buf.extend(chunk)
             for line in self._extract_lines(buf):
                 rec = self._parse_lep(line)
-                if rec is not None:
-                    self._set_latest(rec)
+                with self._lock:
+                    self._data = rec
