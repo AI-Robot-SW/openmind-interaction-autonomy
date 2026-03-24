@@ -51,7 +51,6 @@ from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
 from providers.distmap_provider import DistMapProvider
 from providers.dwa_route_provider import DwaRouteProvider
 from providers.gnss_route_provider import GnssRouteProvider
-from providers.location_provider import LocationProvider
 from providers.navigation_provider import NavigationProvider
 from providers.pointcloud_provider import PointCloudProvider
 from providers.realsense_camera_provider import RealSenseCameraProvider
@@ -136,7 +135,7 @@ def parse_args():
     )
     # Hardware connection args
     p.add_argument("--ethernet", default="eno1", help="Unitree Go2 Ethernet channel (e.g. eth0).")
-    p.add_argument("--gnss-port", default="/dev/ttyACM0", help="GNSS serial port.")
+    p.add_argument("--gnss-port", default="/dev/rtk", help="GNSS serial port.")
     p.add_argument("--gnss-baud", type=int, default=115200, help="GNSS serial baudrate.")
     p.add_argument("--uwb-port", default=None, help="UWB serial port. Omit to run without UWB.")
     p.add_argument("--uwb-baud", type=int, default=115200, help="UWB serial baudrate.")
@@ -164,12 +163,12 @@ def setup_providers(args) -> None:
     logging.info("UnitreeGo2Provider started (channel=%r)", args.ethernet)
 
     # 2. Location (GPS + UWB) — required for GNSS route following
-    gnss_ser = serial.Serial(args.gnss_port, args.gnss_baud, timeout=1.0)
     rtk = RtkProvider(
-        ser=gnss_ser,
+        port=args.gnss_port,
+        baud=args.gnss_baud,
         measRate_ms=100,
         caster=args.ntrip_caster,
-        port=args.ntrip_port,
+        ntrip_port=args.ntrip_port,
         mountpoint=args.ntrip_mountpoint,
         user=args.ntrip_user,
         password=args.ntrip_password,
@@ -185,9 +184,10 @@ def setup_providers(args) -> None:
             "get_record": lambda s: None,
         })()
         logging.warning("UWB port not specified — running without UWB")
-    loc = LocationProvider(gnss=rtk, uwb=uwb)
-    loc.start()
-    logging.info("LocationProvider started")
+    rtk.start()
+    logging.info("RtkProvider started")
+    uwb.start()
+    logging.info("UwbProvider started")
 
     # 3. Camera → Segmentation → PointCloud — required for BEV obstacle grid
     RealSenseCameraProvider(camera_index=args.camera_index).start()
@@ -222,7 +222,8 @@ def teardown_providers() -> None:
         ("PointCloudProvider",       lambda: PointCloudProvider().stop()),
         ("SegmentationProvider",     lambda: SegmentationProvider().stop()),
         ("RealSenseCameraProvider",  lambda: RealSenseCameraProvider().stop()),
-        ("LocationProvider",         lambda: LocationProvider().stop()),
+        ("UwbProvider",              lambda: UwbProvider().stop()),
+        ("RtkProvider",              lambda: RtkProvider().stop()),
         ("UnitreeGo2Provider",       lambda: UnitreeGo2Provider().stop()),
     ]:
         try:

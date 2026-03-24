@@ -12,7 +12,7 @@ from typing import List, Tuple, Optional
 
 from .singleton import singleton
 
-from .location_provider import LocationProvider
+from .rtk_provider import RtkProvider
 from .unitree_go2_provider import UnitreeGo2Provider
 from .singleton import singleton
 
@@ -163,7 +163,7 @@ class GnssRouteProvider:
         self.max_vx = max_vx
         self.max_vyaw = max_vyaw
 
-        self.location_provider = LocationProvider()
+        self.rtk_provider = RtkProvider()
         self.unitree_go2_provider = UnitreeGo2Provider()
 
         self._data: Optional[GnssRouteRecord] = None
@@ -171,6 +171,8 @@ class GnssRouteProvider:
 
         self.running: bool = False
         self._thread: Optional[threading.Thread] = None
+
+        self._tracker: Optional[WaypointTracker] = None
 
         # ---- runtime state (accessed only from control thread) ----
         self._heading_calibrated: bool = False
@@ -217,7 +219,7 @@ class GnssRouteProvider:
         """RTK 신호가 준비될 때까지 대기. 활성화 시 True, 비활성화 시 False."""
         logging.info("GnssRouteProvider: waiting for reliable RTK state …")
         while self.running:
-            gnss = self.location_provider.get_record().gnss
+            gnss = self.rtk_provider.data
             if gnss is not None and (gnss.carrSoln or 0) >= 1:
                 logging.info("GnssRouteProvider: GNSS ready")
                 return True
@@ -230,7 +232,7 @@ class GnssRouteProvider:
         odom_init = self.unitree_go2_provider.get_odometry()
         yaw_init_deg = math.degrees(odom_init.yaw)
 
-        gnss_init = self.location_provider.get_record().gnss
+        gnss_init = self.rtk_provider.data
         lat_init, lon_init = gnss_init.lat, gnss_init.lon
 
         while self.running:
@@ -252,7 +254,7 @@ class GnssRouteProvider:
                 time.sleep(0.01)
 
             odom = self.unitree_go2_provider.get_odometry()
-            gnss = self.location_provider.get_record().gnss
+            gnss = self.rtk_provider.data
 
             traveled = math.hypot(odom.x - odom_init.x, odom.y - odom_init.y)
             if traveled >= 3.0:
@@ -261,7 +263,8 @@ class GnssRouteProvider:
                 gnss_west, gnss_north = _haversine_xy(lat_init, lon_init, gnss.lat, gnss.lon)
                 gnss_heading = math.degrees(math.atan2(gnss_west, gnss_north))
                 odom_heading = math.degrees(math.atan2(odom_dy, odom_dx))
-                self._yaw_offset_deg = _wrap_deg(gnss_heading - odom_heading)
+                with self._lock:
+                    self._yaw_offset_deg = _wrap_deg(gnss_heading - odom_heading)
                 self._heading_calibrated = True
                 logging.info("GnssRouteProvider: heading calibrated, yaw_offset_deg=%.2f°", self._yaw_offset_deg)
                 return True
@@ -276,8 +279,8 @@ class GnssRouteProvider:
         현재 위치와 현재 목표 waypoint 사이의 거리가 reach_tol 이내가 되면
         다음 waypoint로 목표를 갱신한다. 마지막 waypoint에 도달하면 루프를 종료.
         """
-        gnss_init = self.location_provider.get_record().gnss
-        path = WaypointTracker(
+        gnss_init = self.rtk_provider.data
+        self._tracker = WaypointTracker(
             self.waypoints,
             reach_tol=self.reach_tol_m,
             start_lat=gnss_init.lat,
@@ -285,19 +288,19 @@ class GnssRouteProvider:
         )
         logging.info(
             "GnssRouteProvider: mission active, following %d waypoints from index=%d (%.6f, %.6f)",
-            len(self.waypoints), path.idx, self.waypoints[path.idx][0], self.waypoints[path.idx][1],
+            len(self.waypoints), self._tracker.idx, self.waypoints[self._tracker.idx][0], self.waypoints[self._tracker.idx][1],
         )
 
         odom_snap = self.unitree_go2_provider.get_odometry()
 
         while self.running:
-            gnss = self.location_provider.get_record().gnss
+            gnss = self.rtk_provider.data
             lat_cur, lon_cur = gnss.lat, gnss.lon
 
             odom = self.unitree_go2_provider.get_odometry()
             global_heading = math.degrees(odom.yaw) + self._yaw_offset_deg
 
-            goal = path.update(lat_cur, lon_cur)
+            goal = self._tracker.update(lat_cur, lon_cur)
             if goal is None:
                 self._reached_goal = True
                 logging.info("GnssRouteProvider: path finished!")
@@ -319,8 +322,9 @@ class GnssRouteProvider:
                 if abs(odom_dx) > 1e-6 or abs(odom_dy) > 1e-6:
                     odom_travel_deg = math.degrees(math.atan2(odom_dy, odom_dx))
                     yaw_offset_new_deg = _wrap_deg(gnss_heading - odom_travel_deg)
-                    delta = _wrap_deg(yaw_offset_new_deg - self._yaw_offset_deg)
-                    self._yaw_offset_deg = _wrap_deg(self._yaw_offset_deg + self.yaw_update_alpha * delta)
+                    with self._lock:
+                        delta = _wrap_deg(yaw_offset_new_deg - self._yaw_offset_deg)
+                        self._yaw_offset_deg = _wrap_deg(self._yaw_offset_deg + self.yaw_update_alpha * delta)
                     global_heading = math.degrees(odom.yaw) + self._yaw_offset_deg
                 lat_snap, lon_snap = lat_cur, lon_cur
                 odom_snap = odom
@@ -354,6 +358,18 @@ class GnssRouteProvider:
         """최신 GnssRouteRecord. 첫 레코드 생성 전에는 None."""
         with self._lock:
             return self._data
+
+    @property
+    def current_waypoint_idx(self) -> int:
+        """현재 목표 waypoint 인덱스. 경로 추종 시작 전에는 0."""
+        tracker = self._tracker
+        return tracker.idx if tracker is not None else 0
+
+    @property
+    def yaw_offset_deg(self) -> float:
+        """GNSS calibration으로 구한 yaw offset (degrees). heading_calibrated 전에는 0.0."""
+        with self._lock:
+            return self._yaw_offset_deg
         
     def _run(self) -> None:
         try:
@@ -383,7 +399,7 @@ class GnssRouteProvider:
                 if not self._calibrate_heading():
                     return
 
-            gnss = self.location_provider.get_record().gnss
+            gnss = self.rtk_provider.data
             self._follow_path(gnss.lat, gnss.lon)
         finally:
             self.running = False

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from .singleton import singleton
-from .location_provider import LocationProvider
+from .rtk_provider import RtkProvider
 from .gnss_route_provider import GnssRouteProvider
 from .dwa_route_provider import DwaRouteProvider
 
@@ -100,7 +100,6 @@ class NavigationProvider:
     """
     GnssRouteProvider + DwaRouteProvider를 wrapping하는 Navigation Provider.
 
-    LocationProvider와 동일한 패턴:
       - 두 하위 provider 인스턴스를 주입받아 start/stop 관리
       - worker thread가 DwaRouteRecord를 폴링하여 NavigationState로 통합
       - get_state() / data 로 최신 상태 제공
@@ -246,28 +245,19 @@ class NavigationProvider:
             return 0.0
 
         try:
-            loc = LocationProvider()
-            gnss = loc.get_record().gnss
+            gnss = RtkProvider().data
             if gnss is None:
                 return 0.0
             lat, lon = float(gnss.lat), float(gnss.lon)
         except Exception:
             return 0.0
 
-        reach_tol = self._gnss.reach_tol_m
+        idx = self._gnss.current_waypoint_idx
 
-        # 현재 위치 기준으로 이미 통과한 waypoint를 건너뜀
-        idx = 0
-        while idx < len(waypoints) - 1:
-            if _haversine_dist_m(lat, lon, waypoints[idx][0], waypoints[idx][1]) < reach_tol:
-                idx += 1
-            else:
-                break
-
-        # 현재 위치 → 다음 waypoint (실시간)
+        # 현재 위치 → 현재 목표 waypoint (실시간)
         rem = _haversine_dist_m(lat, lon, waypoints[idx][0], waypoints[idx][1])
 
-        # 나머지 waypoint 간 구간 합산
+        # 이후 waypoint 간 구간 합산
         for k in range(idx, len(waypoints) - 1):
             rem += _haversine_dist_m(
                 waypoints[k][0], waypoints[k][1],
