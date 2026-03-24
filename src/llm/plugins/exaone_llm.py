@@ -164,15 +164,18 @@ class ExaoneOllamaLLM(LLM[R]):
         instruction = """
 
 Respond ONLY with a JSON array of actions. No other text.
-IMPORTANT: Always include BOTH a "move" action AND a "speak" action. Never omit either one.
+IMPORTANT:
+- speak: 항상 포함하세요. 보행자의 발화에 반드시 응답해야 합니다.
+- move: 보행자가 이동, 정지, 속도 조절 등 navigation 관련 요청을 했을 때만 포함하세요. 일상 대화에는 move를 포함하지 마세요.
 Available actions:
 """ + "\n".join(actions_desc) + """
 
 Response format (JSON array only):
 [{"action": "action_name", "params": {"param_name": "value"}}]
 
-Example:
-[{"action": "move", "params": {"action": "go to L1"}}, {"action": "speak", "params": {"action": "Sure, I will guide you to L1."}}]
+Examples:
+Navigation request: [{"action": "move", "params": {"action": "go to L1"}}, {"action": "speak", "params": {"action": "네, L1으로 출발하겠습니다."}}]
+Casual conversation: [{"action": "speak", "params": {"action": "그러네요, 날씨가 정말 좋습니다."}}]
 """
         return instruction
 
