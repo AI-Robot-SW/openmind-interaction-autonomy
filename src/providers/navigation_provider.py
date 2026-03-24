@@ -107,20 +107,19 @@ class NavigationProvider:
 
     def __init__(
         self,
-        gnss: GnssRouteProvider,
-        dwa: DwaRouteProvider,
         tick_dt: float = 0.05,
         speed_step: float = 0.2,
         speed_min: float = 0.2,
         speed_max: Optional[float] = None,  # None이면 dwa.v_max 사용
         calibrating_speed: float = 0.5,  # 헤딩 캘리브레이션 중 고정 전진 속도 (m/s)
     ) -> None:
-        self._gnss = gnss
-        self._dwa = dwa
+        self._gnss = GnssRouteProvider()
+        self._dwa = DwaRouteProvider()
+
         self._tick_dt = float(tick_dt)
         self._speed_step = float(speed_step)
         self._speed_min = float(speed_min)
-        self._speed_max = float(speed_max) if speed_max is not None else float(dwa.v_max)
+        self._speed_max = float(speed_max) if speed_max is not None else float(self._dwa.v_max)
         self._calibrating_speed = float(calibrating_speed)
         self._active_path: Optional[PathLike] = None
         self._speed_before_pause: Optional[float] = None
@@ -137,9 +136,6 @@ class NavigationProvider:
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
-
-        self._gnss.start()
-        self._dwa.start()
 
         self._stop_evt.clear()
         self.running = True
@@ -162,9 +158,6 @@ class NavigationProvider:
         if self._thread.is_alive():
             logger.warning("NavigationProvider worker thread did not stop within timeout")
         self._thread = None
-
-        self._dwa.stop()
-        self._gnss.stop()
 
         with self._state_lock:
             self._latest_state = NavigationState(

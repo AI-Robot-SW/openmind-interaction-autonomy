@@ -206,10 +206,16 @@ def setup_providers(args) -> None:
     DistMapProvider().start()
     logging.info("DistMapProvider started")
 
-    # 5. Navigation stack — singleton creation only; start() is deferred to set_path()
+    # 5. Navigation stack — gnss/dwa started here; NavigationProvider worker starts on set_path()
     gnss_route = GnssRouteProvider(waypoints=[])
+    gnss_route.start()
+    logging.info("GnssRouteProvider started")
+
     dwa = DwaRouteProvider()
-    NavigationProvider(gnss=gnss_route, dwa=dwa)
+    dwa.start()
+    logging.info("DwaRouteProvider started")
+
+    NavigationProvider()
     logging.info("NavigationProvider singleton created")
 
 
@@ -217,6 +223,8 @@ def teardown_providers() -> None:
     """Stop all providers that were started in setup_providers (reverse order)."""
     for name, stop_fn in [
         ("NavigationProvider",       lambda: NavigationProvider().stop()),
+        ("DwaRouteProvider",         lambda: DwaRouteProvider().stop()),
+        ("GnssRouteProvider",        lambda: GnssRouteProvider().stop()),
         ("DistMapProvider",          lambda: DistMapProvider().stop()),
         ("BEVOccupancyGridProvider", lambda: BEVOccupancyGridProvider().stop()),
         ("PointCloudProvider",       lambda: PointCloudProvider().stop()),
