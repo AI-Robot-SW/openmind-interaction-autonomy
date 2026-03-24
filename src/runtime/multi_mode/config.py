@@ -297,7 +297,19 @@ def load_mode_config(
     )
 
     with open(config_path, "r") as f:
-        raw_config = json5.load(f)
+        raw_text = f.read()
+
+    # Substitute {server_ip} placeholder with OLLAMA_SERVER_IP env var
+    ollama_ip = os.environ.get("OLLAMA_SERVER_IP", "")
+    if ollama_ip and "{server_ip}" in raw_text:
+        raw_text = raw_text.replace("{server_ip}", ollama_ip)
+        logging.info(f"Substituted {{server_ip}} with OLLAMA_SERVER_IP={ollama_ip}")
+    elif "{server_ip}" in raw_text:
+        logging.warning(
+            "Config contains {server_ip} placeholder but OLLAMA_SERVER_IP env var is not set."
+        )
+
+    raw_config = json5.loads(raw_text)
 
     config_version = raw_config.get("version")
     verify_runtime_version(config_version, config_name)
