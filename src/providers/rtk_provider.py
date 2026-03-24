@@ -1,15 +1,15 @@
 # rtk_provider.py
 
-from __future__ import annotations
-
-import base64
-import logging
-import socket
-import threading
 import time
+import base64
+import socket
+import logging
+import threading
+
 from typing import Optional, Tuple
 
 from providers.gnss_provider import GnssProvider, UbxPvtRecord
+from providers.singleton import singleton
 
 
 def _nmea_checksum(payload: str) -> str:
@@ -44,29 +44,45 @@ def _nmea_gga(lat_ubx: float, lon_ubx: float, hour: int, minute: int, second: in
     return f"${payload}*{cs}\r\n".encode("ascii")
 
 
+@singleton
 class RtkProvider(GnssProvider):
     def __init__(
         self,
-        ser,
+        port: str = "/dev/rtk",
+        baud: int = 115200,
         measRate_ms: int = 100,
-        caster: Optional[str] = None,
-        port: int = 2101,
-        mountpoint: str = "",
+        caster: str = "rts2.ngii.go.kr",
+        ntrip_port: int = 2101,
+        mountpoint: str = "VRS-RTCM32",
         user: str = "",
         password: str = "",
-        write_lock: Optional[threading.RLock] = None,
     ) -> None:
-        super().__init__(ser=ser, measRate_ms=measRate_ms, write_lock=write_lock)
+        super().__init__(port=port, baud=baud, measRate_ms=measRate_ms)
 
         self.caster = caster
-        self.port = int(port)
+        self.ntrip_port = int(ntrip_port)
         self.mountpoint = mountpoint.lstrip("/")
         self.user = user
         self.password = password
 
-        self._ntrip_stop_evt = threading.Event()
         self._ntrip_thread: Optional[threading.Thread] = None
         self._last_gga_ts = 0.0
+
+    def start(self) -> None:
+        super().start()
+
+        if self.caster and (self._ntrip_thread is None or not self._ntrip_thread.is_alive()):
+            self._ntrip_thread = threading.Thread(target=self._ntrip_loop, daemon=True, name="NtripClient")
+            self._ntrip_thread.start()
+
+    def stop(self) -> None:
+        self.running = False
+
+        if self._ntrip_thread and self._ntrip_thread.is_alive():
+            self._ntrip_thread.join(timeout=2.0)
+        self._ntrip_thread = None
+
+        super().stop()
 
     def _connect_ntrip_caster(self) -> socket.socket:
         auth = base64.b64encode(f"{self.user}:{self.password}".encode()).decode()
@@ -77,7 +93,7 @@ class RtkProvider(GnssProvider):
             "\r\n"
         ).encode("ascii")
 
-        sock = socket.create_connection((self.caster, self.port), timeout=10)
+        sock = socket.create_connection((self.caster, self.ntrip_port), timeout=10)
         sock.sendall(req)
         return sock
 
@@ -106,7 +122,7 @@ class RtkProvider(GnssProvider):
             return
         self._last_gga_ts = now
 
-        rec: Optional[UbxPvtRecord] = self.get_record()
+        rec: Optional[UbxPvtRecord] = self.data
         if rec is None:
             return
 
@@ -120,12 +136,9 @@ class RtkProvider(GnssProvider):
     def _ntrip_loop(self) -> None:
         log = logging.getLogger(__name__)
 
-        while not self._ntrip_stop_evt.is_set():
+        while self.running:
             sock: Optional[socket.socket] = None
             try:
-                if not self.caster:
-                    return
-
                 sock = self._connect_ntrip_caster()
                 header, rest = self._read_header(sock)
 
@@ -137,10 +150,10 @@ class RtkProvider(GnssProvider):
                 self._last_gga_ts = 0.0
 
                 if rest:
-                    with self.write_lock:
+                    with self._write_lock:
                         self.ser.write(rest)
 
-                while not self._ntrip_stop_evt.is_set():
+                while self.running:
                     self._send_nmea_gga(sock)
 
                     try:
@@ -151,12 +164,14 @@ class RtkProvider(GnssProvider):
                     if chunk == b"":
                         raise ConnectionError("NTRIP socket closed")
 
-                    with self.write_lock:
+                    with self._write_lock:
                         self.ser.write(chunk)
 
             except Exception as e:
                 log.warning(f"[NTRIP] {e} (retry in 5s)")
-                self._ntrip_stop_evt.wait(5.0)
+                deadline = time.monotonic() + 5.0
+                while self.running and time.monotonic() < deadline:
+                    time.sleep(0.1)
 
             finally:
                 if sock is not None:
@@ -164,25 +179,3 @@ class RtkProvider(GnssProvider):
                         sock.close()
                     except Exception:
                         pass
-
-    def start(self) -> None:
-        super().start()
-
-        if self.caster and self._ntrip_thread is None:
-            self._ntrip_stop_evt.clear()
-            self._ntrip_thread = threading.Thread(
-                target=self._ntrip_loop,
-                daemon=True,
-                name="NtripClient",
-            )
-            self._ntrip_thread.start()
-
-    def stop(self) -> None:
-        if self._ntrip_thread is not None:
-            self._ntrip_stop_evt.set()
-            self._ntrip_thread.join(timeout=2.0)
-            
-            if not self._ntrip_thread.is_alive():
-                self._ntrip_thread = None
-        
-        super().stop()
