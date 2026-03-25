@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from .singleton import singleton
-from .location_provider import LocationProvider
+from .rtk_provider import RtkProvider
 from .gnss_route_provider import GnssRouteProvider
 from .dwa_route_provider import DwaRouteProvider
 
@@ -100,7 +100,6 @@ class NavigationProvider:
     """
     GnssRouteProvider + DwaRouteProvider를 wrapping하는 Navigation Provider.
 
-    LocationProvider와 동일한 패턴:
       - 두 하위 provider 인스턴스를 주입받아 start/stop 관리
       - worker thread가 DwaRouteRecord를 폴링하여 NavigationState로 통합
       - get_state() / data 로 최신 상태 제공
@@ -108,20 +107,19 @@ class NavigationProvider:
 
     def __init__(
         self,
-        gnss: GnssRouteProvider,
-        dwa: DwaRouteProvider,
         tick_dt: float = 0.05,
         speed_step: float = 0.2,
         speed_min: float = 0.2,
         speed_max: Optional[float] = None,  # None이면 dwa.v_max 사용
         calibrating_speed: float = 0.5,  # 헤딩 캘리브레이션 중 고정 전진 속도 (m/s)
     ) -> None:
-        self._gnss = gnss
-        self._dwa = dwa
+        self._gnss = GnssRouteProvider()
+        self._dwa = DwaRouteProvider()
+
         self._tick_dt = float(tick_dt)
         self._speed_step = float(speed_step)
         self._speed_min = float(speed_min)
-        self._speed_max = float(speed_max) if speed_max is not None else float(dwa.v_max)
+        self._speed_max = float(speed_max) if speed_max is not None else float(self._dwa.v_max)
         self._calibrating_speed = float(calibrating_speed)
         self._active_path: Optional[PathLike] = None
         self._speed_before_pause: Optional[float] = None
@@ -138,9 +136,6 @@ class NavigationProvider:
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
-
-        self._gnss.start()
-        self._dwa.start()
 
         self._stop_evt.clear()
         self.running = True
@@ -163,9 +158,6 @@ class NavigationProvider:
         if self._thread.is_alive():
             logger.warning("NavigationProvider worker thread did not stop within timeout")
         self._thread = None
-
-        self._dwa.stop()
-        self._gnss.stop()
 
         with self._state_lock:
             self._latest_state = NavigationState(
@@ -246,28 +238,19 @@ class NavigationProvider:
             return 0.0
 
         try:
-            loc = LocationProvider()
-            gnss = loc.get_record().gnss
+            gnss = RtkProvider().data
             if gnss is None:
                 return 0.0
             lat, lon = float(gnss.lat), float(gnss.lon)
         except Exception:
             return 0.0
 
-        reach_tol = self._gnss.reach_tol_m
+        idx = self._gnss.current_waypoint_idx
 
-        # 현재 위치 기준으로 이미 통과한 waypoint를 건너뜀
-        idx = 0
-        while idx < len(waypoints) - 1:
-            if _haversine_dist_m(lat, lon, waypoints[idx][0], waypoints[idx][1]) < reach_tol:
-                idx += 1
-            else:
-                break
-
-        # 현재 위치 → 다음 waypoint (실시간)
+        # 현재 위치 → 현재 목표 waypoint (실시간)
         rem = _haversine_dist_m(lat, lon, waypoints[idx][0], waypoints[idx][1])
 
-        # 나머지 waypoint 간 구간 합산
+        # 이후 waypoint 간 구간 합산
         for k in range(idx, len(waypoints) - 1):
             rem += _haversine_dist_m(
                 waypoints[k][0], waypoints[k][1],
