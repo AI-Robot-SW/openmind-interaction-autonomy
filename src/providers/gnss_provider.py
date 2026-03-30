@@ -1,11 +1,13 @@
 # gnss_provider.py
 
-from __future__ import annotations
-
 import time
+import logging
 import threading
+
+import serial
+
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from pyubx2 import UBXReader, UBXMessage, SET, UBX_PROTOCOL
 
@@ -28,65 +30,62 @@ class UbxPvtRecord:
 
 
 class GnssProvider:
-    def __init__(self, ser, measRate_ms: int = 100, write_lock: Optional[threading.RLock] = None) -> None:
-        self.ser = ser
+    def __init__(
+        self,
+        port: str = "/dev/rtk",
+        baud: int = 115200,
+        measRate_ms: int = 100
+    ):
+        self._port = port
+        self._baud = baud
         self.measRate_ms = measRate_ms
-        self.write_lock = write_lock or threading.RLock()
-
+        self.ser: Optional[serial.Serial] = None
+        
+        self._write_lock = threading.RLock()
+        self._data: Optional[UbxPvtRecord] = None
         self._lock = threading.Lock()
-        self._latest: Optional[UbxPvtRecord] = None
 
-        self._stop_evt = threading.Event()
+        self.running = False
         self._thread: Optional[threading.Thread] = None
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
+            logging.warning("Gnss(RTK)Provider already running")
             return
 
-        self._stop_evt.clear()
+        self.ser = serial.Serial(self._port, self._baud, timeout=1.0)
+
+        self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="GnssReader")
         self._thread.start()
+        
+        # 첫 레코드 도착까지 대기
+        deadline = time.monotonic() + 10.0
+        while time.monotonic() < deadline:
+            with self._lock:
+                if self._data is not None:
+                    break
+            time.sleep(0.01)
+        else:
+            raise RuntimeError("Gnss(RTK)Provider: timed out waiting for first record")
+
+        logging.info("Gnss(RTK)Provider started")
 
     def stop(self) -> None:
-        if self._thread is None:
-            return
-        
-        self._stop_evt.set()
-        self._thread.join(timeout=2.0)
+        self.running = False
 
-        if not self._thread.is_alive():
-            self._thread = None
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
+        self._thread = None
 
-    def get_record(self) -> Optional[UbxPvtRecord]:
-        with self._lock:
-            return self._latest
+        if self.ser is not None:
+            self.ser.close()
+            self.ser = None
 
-    def get(self) -> Optional[Dict[str, Any]]:
-        rec = self.get_record()
-        if rec is None:
-            return None
-        return {
-            "t_monotonic": rec.t_monotonic,
-            "hour": rec.hour,
-            "minute": rec.minute,
-            "second": rec.second,
-            "validTime": rec.validTime,
-            "fixType": rec.fixType,
-            "diffSoln": rec.diffSoln,
-            "carrSoln": rec.carrSoln,
-            "numSV": rec.numSV,
-            "lon": rec.lon,
-            "lat": rec.lat,
-            "hAcc_m": rec.hAcc_m,
-            "pDOP": rec.pDOP,
-        }
-
-    def _set_latest(self, rec: UbxPvtRecord) -> None:
-        with self._lock:
-            self._latest = rec
+        logging.info("Gnss(RTK)Provider stopped")
 
     def _cfg_interface(self) -> None:
-        with self.write_lock:
+        with self._write_lock:
             self.ser.write(
                 UBXMessage(
                     "CFG", "CFG-RATE", SET,
@@ -126,16 +125,23 @@ class GnssProvider:
             pDOP=getattr(parsed, "pDOP", None),
         )
 
+    @property
+    def data(self) -> Optional[UbxPvtRecord]:
+        """최신 UbxPvtRecord. 데이터 수신 전에는 None."""
+        with self._lock:
+            return self._data
+        
     def _run(self) -> None:
         self._cfg_interface()
         ubr = UBXReader(self.ser, protfilter=UBX_PROTOCOL)
 
-        while not self._stop_evt.is_set():
+        while self.running:
             try:
                 _, parsed = ubr.read()
             except Exception:
-                self._stop_evt.wait(0.01)
+                time.sleep(0.01)
                 continue
 
             if isinstance(parsed, UBXMessage) and parsed.identity == "NAV-PVT":
-                self._set_latest(self._parse_navpvt(parsed))
+                with self._lock:
+                    self._data = self._parse_navpvt(parsed)

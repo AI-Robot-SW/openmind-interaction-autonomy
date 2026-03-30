@@ -31,6 +31,9 @@ except ImportError:
 
 from .singleton import singleton
 
+# Stop behavior: True = gradual deceleration before StopMove, False = immediate StopMove.
+STOP_MOVE_GRADUAL_DECEL = True
+
 
 @dataclass(frozen=True)
 class OdometryData:
@@ -106,8 +109,10 @@ class UnitreeGo2Provider:
         self._sport_client: Optional[SportClient] = None
         self._state_subscriber: Optional[ChannelSubscriber] = None
         self._lock = threading.Lock()
+        self._motion_lock = threading.Lock()
         self._running: bool = False
         self._data: Optional[dict] = None
+        self._last_move_command = (0.0, 0.0, 0.0)
         
         # Odometry data storage
         self._odometry_lock = threading.Lock()
@@ -252,6 +257,8 @@ class UnitreeGo2Provider:
             return True
         try:
             code = self._sport_client.StopMove()
+            with self._motion_lock:
+                self._last_move_command = (0.0, 0.0, 0.0)
             if code != 0:
                 logging.error("UnitreeGo2Provider: StopMove on stop failed (code=%s)", code)
                 logging.info("UnitreeGo2Provider stopped")
@@ -311,7 +318,9 @@ class UnitreeGo2Provider:
             logging.warning("UnitreeGo2Provider: move ignored (SportClient not ready)")
             return False
         try:
-            self._sport_client.Move(vx, vy, vyaw)
+            with self._motion_lock:
+                self._sport_client.Move(vx, vy, vyaw)
+                self._last_move_command = (vx, vy, vyaw)
             return True
         except Exception as e:
             logging.error("UnitreeGo2Provider: Move failed: %s", e)
@@ -319,10 +328,12 @@ class UnitreeGo2Provider:
 
     def stop_move(self) -> bool:
         """
-        Stop movement (velocity command zero).
+        Stop movement; behavior depends on STOP_MOVE_GRADUAL_DECEL.
 
-        Robot behavior: Stops all locomotion. Sets velocity to zero so the robot
-        stops walking/running in place. Does not change posture (stand/sit/damp).
+        If STOP_MOVE_GRADUAL_DECEL is True: short staged deceleration (reduces
+        the last commanded velocity over a few steps, then StopMove). Softens
+        the stop to help balance. If False: immediately calls StopMove with no
+        ramp. Does not change posture (stand/sit/damp).
 
         Returns
         -------
@@ -332,11 +343,28 @@ class UnitreeGo2Provider:
         if self._sport_client is None:
             return False
         try:
-            code = self._sport_client.StopMove()
-            if code != 0:
-                logging.error("UnitreeGo2Provider: StopMove failed (code=%s)", code)
-                return False
-            return True
+            with self._motion_lock:
+                if STOP_MOVE_GRADUAL_DECEL:
+                    start_vx, start_vy, start_vyaw = self._last_move_command
+                    if any(abs(v) > 1e-6 for v in (start_vx, start_vy, start_vyaw)):
+                        decel_steps = 8
+                        decel_interval = 0.1
+                        for step in range(decel_steps - 1, -1, -1):
+                            ratio = step / decel_steps
+                            self._sport_client.Move(
+                                start_vx * ratio,
+                                start_vy * ratio,
+                                start_vyaw * ratio,
+                            )
+                            time.sleep(decel_interval)
+
+                code = self._sport_client.StopMove()
+                self._last_move_command = (0.0, 0.0, 0.0)
+
+                if code != 0:
+                    logging.error("UnitreeGo2Provider: StopMove failed (code=%s)", code)
+                    return False
+                return True
         except Exception as e:
             logging.error("UnitreeGo2Provider: StopMove failed: %s", e)
             return False
