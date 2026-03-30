@@ -22,7 +22,13 @@ from pydantic import Field
 from inputs.base import Message, SensorConfig
 from inputs.base.loop import FuserInput
 
+from providers.io_provider import IOProvider
 from providers.stt_provider import STTProvider
+
+# 목적지 키워드 — 매칭 시 IOProvider에 저장하여 모드 전환 후에도 기억
+_DESTINATION_KEYWORDS = ["L1", "L2", "L3", "북문"]
+# 도착 키워드 — 매칭 시 저장된 목적지 초기화
+_ARRIVAL_KEYWORDS = ["도착", "arrived"]
 
 
 class SoundSensorConfig(SensorConfig):
@@ -51,7 +57,7 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
         LLM에 전달될 입력 소스 설명자
     message_buffer : Queue[str]
         STT 결과 메시지 버퍼
-    messages : list[str]
+    messages : list[Message]
         처리된 메시지 목록
     """
 
@@ -63,7 +69,10 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
 
         # 메시지 버퍼
         self.message_buffer: Queue[str] = Queue()
-        self.messages: list[str] = []
+        self.messages: list[Message] = []
+
+        # IOProvider 싱글턴 — 모드 전환 입력 전달용 + Fuser 입력 기록용
+        self.io_provider = IOProvider()
 
         # STTProvider 싱글턴에 결과 콜백 등록
         self._stt_provider = STTProvider()
@@ -78,6 +87,23 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
         """STT 결과 콜백 핸들러."""
         if text and len(text.strip()) > 0:
             self.message_buffer.put(text)
+            self.io_provider.add_mode_transition_input(text)
+
+            # 목적지 키워드 감지 시 IOProvider에 저장 (모드 전환 후에도 기억)
+            text_lower = text.lower()
+            for dest in _DESTINATION_KEYWORDS:
+                if dest.lower() in text_lower:
+                    self.io_provider.add_dynamic_variable("last_destination", dest)
+                    logging.info("Destination detected and stored: %s", dest)
+                    break
+
+            # 도착 키워드 감지 시 저장된 목적지 초기화
+            for kw in _ARRIVAL_KEYWORDS:
+                if kw.lower() in text_lower:
+                    self.io_provider.add_dynamic_variable("last_destination", None)
+                    logging.info("Arrival detected, destination cleared")
+                    break
+
             logging.debug("STT result received: %s", text)
 
     async def _poll(self) -> Optional[str]:
@@ -101,22 +127,33 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
 
         if pending_message is not None:
             if len(self.messages) == 0:
-                self.messages.append(pending_message.message)
+                self.messages.append(pending_message)
             else:
                 # 연속된 메시지는 하나로 결합
-                self.messages[-1] = f"{self.messages[-1]} {pending_message.message}"
+                prev = self.messages[-1]
+                self.messages[-1] = Message(
+                    timestamp=pending_message.timestamp,
+                    message=f"{prev.message} {pending_message.message}",
+                )
 
     def formatted_latest_buffer(self) -> Optional[str]:
         """최신 버퍼 내용을 LLM 입력 형식으로 포맷팅."""
         if len(self.messages) == 0:
             return None
 
-        result = f"""
-INPUT: {self.descriptor_for_LLM}
-// START
-{self.messages[-1]}
-// END
-"""
+        latest_message = self.messages[-1]
+
+        result = (
+            f"\nINPUT: {self.descriptor_for_LLM}\n// START\n"
+            f"{latest_message.message}\n// END\n"
+        )
+
+        self.io_provider.add_input(
+            self.__class__.__name__,
+            latest_message.message,
+            latest_message.timestamp,
+        )
+
         # 버퍼 초기화
         self.messages = []
         return result

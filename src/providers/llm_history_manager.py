@@ -103,9 +103,18 @@ class LLMHistoryManager:
 
             logging.info(f"Information to summarize:\n{summary_prompt}")
 
+            summary_model = self.config.model
+            if not summary_model:
+                logging.warning(
+                    "LLMHistoryManager: no model configured, skipping summarization"
+                )
+                return ChatMessage(
+                    role="system", content="Error: no model configured for summarization"
+                )
+
             response = await asyncio.wait_for(
                 self.client.chat.completions.create(  # type: ignore
-                    model=self.config.model or "gpt-4o-mini",
+                    model=summary_model,
                     messages=[
                         {"role": "system", "content": self.system_prompt},
                         {"role": "user", "content": summary_prompt},

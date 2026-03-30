@@ -27,8 +27,8 @@ from pydantic import Field
 from inputs.base import Message, SensorConfig
 from inputs.base.loop import FuserInput
 
-# TODO: Provider import 추가 예정
-# from providers.location_provider import LocationProvider
+from providers.io_provider import IOProvider
+from providers.location_provider import LocationProvider
 
 
 @dataclass
@@ -235,6 +235,12 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
         # LLM 입력 설명자
         self.descriptor_for_LLM = "Location"
 
+        # 메시지 버퍼 (스킬 준수: list[Message])
+        self.messages: list[Message] = []
+
+        # IOProvider 싱글턴 — Fuser 입력 기록용
+        self.io_provider = IOProvider()
+
         # 데이터 버퍼
         self.message_buffer: Queue[LocationData] = Queue()
         self.latest_location: Optional[LocationData] = None
@@ -242,8 +248,8 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
         # 위치 이름 맵
         self._location_names: Dict[Tuple[float, float], str] = {}
 
-        # TODO: Provider 초기화
-        # self.location_provider = LocationProvider(...)
+        # LocationBg에서 singleton 초기화 후 _poll에서 lazy 접근
+        self._location_provider = None
 
         logging.info(
             f"LocationSensor initialized with method={config.localization_method}, "
@@ -268,19 +274,37 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
 
     async def _poll(self) -> Optional[LocationData]:
         """
-        메시지 버퍼에서 새 위치 데이터를 폴링.
+        LocationProvider에서 위치 데이터를 폴링.
 
         Returns
         -------
         Optional[LocationData]
-            버퍼에 데이터가 있으면 반환, 없으면 None
+            위치 데이터가 있으면 반환, 없으면 None
         """
-        await asyncio.sleep(0.1)
-        try:
-            location_data = self.message_buffer.get_nowait()
-            return location_data
-        except Empty:
+        await asyncio.sleep(1.0 / self.config.update_rate_hz)
+
+        # Lazy singleton access (LocationBg에서 먼저 초기화됨)
+        if self._location_provider is None:
+            try:
+                self._location_provider = LocationProvider()
+            except Exception:
+                return None
+
+        rec = self._location_provider.get_record()
+        if rec.gnss is None and rec.uwb is None:
             return None
+
+        pose = None
+        confidence = 0.0
+        if rec.gnss and rec.gnss.fixType and rec.gnss.fixType > 0:
+            pose = Pose2D(x=rec.gnss.lat, y=rec.gnss.lon, theta=0.0)
+            confidence = min(1.0, max(0.0, 1.0 - (rec.gnss.hAcc_m or 99) / 100))
+
+        return LocationData(
+            timestamp=time.time(),
+            current_pose=pose,
+            localization_confidence=confidence,
+        )
 
     async def _raw_to_text(self, raw_input: Optional[LocationData]) -> Optional[Message]:
         """
@@ -331,7 +355,7 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
 
     async def raw_to_text(self, raw_input: Optional[LocationData]) -> None:
         """
-        위치 데이터를 처리하고 최신 위치 업데이트.
+        위치 데이터를 처리하고 메시지 목록에 추가.
 
         Parameters
         ----------
@@ -340,8 +364,10 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
         """
         pending_message = await self._raw_to_text(raw_input)
 
-        if pending_message is not None and raw_input is not None:
-            self.latest_location = raw_input
+        if pending_message is not None:
+            self.messages.append(pending_message)
+            if raw_input is not None:
+                self.latest_location = raw_input
 
     def formatted_latest_buffer(self) -> Optional[str]:
         """
@@ -352,35 +378,48 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationData]]):
         Optional[str]
             포맷팅된 입력 문자열, 버퍼가 비어있으면 None
         """
-        if self.latest_location is None:
+        if len(self.messages) == 0:
             return None
 
-        # 위치 정보 포맷팅
-        location = self.latest_location
-        info_parts = []
+        latest_message = self.messages[-1]
 
-        if location.current_location_name:
-            info_parts.append(f"Location: {location.current_location_name}")
+        # 위치 정보를 추가로 풍부하게 포맷팅 (latest_location이 있으면 사용)
+        if self.latest_location is not None:
+            location = self.latest_location
+            info_parts = []
 
-        if location.current_pose:
-            pose = location.current_pose
-            info_parts.append(f"Coordinates: ({pose.x:.2f}, {pose.y:.2f}, θ={pose.theta:.2f})")
+            if location.current_location_name:
+                info_parts.append(f"Location: {location.current_location_name}")
 
-        if location.is_navigating:
-            info_parts.append(f"Status: Navigating")
-            if location.distance_to_goal:
-                info_parts.append(f"Distance to goal: {location.distance_to_goal:.1f}m")
+            if location.current_pose:
+                pose = location.current_pose
+                info_parts.append(f"Coordinates: ({pose.x:.2f}, {pose.y:.2f}, θ={pose.theta:.2f})")
+
+            if location.is_navigating:
+                info_parts.append("Status: Navigating")
+                if location.distance_to_goal:
+                    info_parts.append(f"Distance to goal: {location.distance_to_goal:.1f}m")
+            else:
+                info_parts.append(f"Status: {location.navigation_status}")
+
+            display_text = "\n".join(info_parts) if info_parts else latest_message.message
         else:
-            info_parts.append(f"Status: {location.navigation_status}")
+            display_text = latest_message.message
 
-        info_text = "\n".join(info_parts)
+        result = (
+            f"\nINPUT: {self.descriptor_for_LLM}\n// START\n"
+            f"{display_text}\n// END\n"
+        )
 
-        result = f"""
-INPUT: {self.descriptor_for_LLM}
-// START
-{info_text}
-// END
-"""
+        self.io_provider.add_input(
+            self.__class__.__name__,
+            display_text,
+            latest_message.timestamp,
+        )
+
+        # 버퍼 초기화
+        self.messages = []
+        self.latest_location = None
         return result
 
     # ========== Interface Methods (for other modules) ==========

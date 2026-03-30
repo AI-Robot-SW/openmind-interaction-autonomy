@@ -1,0 +1,203 @@
+{
+  // Pedestrian Companion Robot — Multi-Mode Configuration
+  // 2개 모드: standby, accompany
+  // - conversation/caution 모드 제거: LLM function calling으로 대화/네비게이션 의도를 자체 판단
+  // - 키워드 기반 전이 최소화: false positive 방지
+  //
+  // 실행:
+  //   python main.py --config pedestrian_robot_modes --mode
+
+  "version": "v1.0.1",
+  "name": "pedestrian_robot",
+  "default_mode": "standby",
+  "allow_manual_switching": true,
+  "mode_memory_enabled": false,
+
+  "api_key": "openmind_free",
+
+  "system_governance": "다음은 당신의 행동을 지배하는 법칙입니다. 이 법칙을 위반하지 마세요.\n제1법칙: 로봇은 인간에게 해를 끼치거나, 위험에 처한 인간을 방관해서는 안 된다.\n제2법칙: 로봇은 인간의 명령에 복종해야 한다. 단, 그 명령이 제1법칙에 위배되는 경우는 예외이다.\n제3법칙: 로봇은 자신을 보호해야 한다. 단, 그 보호가 제1법칙 또는 제2법칙에 위배되는 경우는 예외이다.\n제1법칙이 가장 중요하며, 제2법칙과 제3법칙보다 우선한다.",
+
+  "system_prompt_examples": "다음은 당신이 겪을 수 있는 상호작용 예시입니다:\n\n1. 보행자가 '북문으로 가줘'라고 하면:\n    Move: 'go to NG'\n    Speak: '네, 현재 목적지는 북문입니다. 북문으로 출발하겠습니다.'\n\n2. 이동 중 보행자가 '좀 더 빨리 가자'라고 하면:\n    Move: 'speed up'\n    Speak: '네, 좀 더 빨리 가겠습니다.'\n\n3. 이동 중 보행자가 '천천히'라고 하면:\n    Move: 'slow down'\n    Speak: '네, 속도를 줄이겠습니다.'\n\n4. 이동 중 보행자가 '얼마나 남았어?'라고 물으면:\n    Speak: '목적지까지 약 N미터 남았습니다.' (move 호출 불필요)\n\n5. 목적지에 도착하면:\n    Move: 'stop move'\n    Speak: '북문에 도착하였습니다. 안내를 종료합니다.'\n\n6. 보행자가 사전 지정되지 않은 목적지(예: '도서관으로 가줘')를 말하면:\n    Speak: '해당 목적지는 지정되어 있지 않습니다. 다시 한번 목적지를 설정해주세요.' (move 호출 불필요)\n\n7. 보행자가 일상 대화를 하면 (예: '날씨 좋다', '저 새 위험하게 노네'):\n    Speak: 자연스럽게 대화 응답 (move 호출 불필요)\n\n8. 보행자가 '잠깐 멈춰'라고 하면:\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다.'\n\n9. 보행자가 다른 용무와 함께 기다려달라고 하면 (예: '~다녀올게 잠깐 기다려', '~할게 잠깐만'):\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다. 다녀오세요.'\n\n10. 보행자가 '다시 가자'라고 하면:\n    Move: 'resume'\n    Speak: '네, 다시 출발하겠습니다.'",
+
+  "cortex_llm": {
+    "type": "ExaoneOllamaLLM",
+    "config": {
+      "agent_name": "pedestrian_robot",
+      "base_url": "http://{server_ip}:11434",
+      "model": "exaone3.5:7.8b",
+      "temperature": 0.7,
+      "num_ctx": 4096,
+      "timeout": 120,
+      "history_length": 10
+    }
+  },
+
+  "modes": {
+    // ─────────────────────────────────────────────
+    // 1. Standby — 대기 모드 (기본 모드)
+    //    사용자가 없거나 대기 중
+    //    speak 액션만 가능 (이동 불가)
+    // ─────────────────────────────────────────────
+    "standby": {
+      "display_name": "대기 모드",
+      "description": "대기 상태. 보행자가 말을 걸거나 목적지를 설정하면 동행 모드로 전환.",
+      "system_prompt_base": "당신은 보행자 안내 로봇입니다. 현재 대기 모드입니다.\n- 반드시 한국어로 응답하세요.\n- 보행자가 다가오면 따뜻하게 인사하고 목적지를 물어보세요.\n- 사전 지정된 목적지는 L8, 북문(NG) 입니다. 이 목적지 중 하나를 말하면 확인 응답을 하세요.\n- 보행자가 사전 지정되지 않은 목적지를 말하면 '해당 목적지는 지정되어 있지 않습니다. 다시 한번 목적지를 설정해주세요.'라고 응답하세요.\n- 스스로 이동하지 마세요. 목적지가 설정되면 시스템이 동행 모드로 전환합니다.\n- 짧고 친절하게 응답하세요.\n- 중요: AVAILABLE INPUTS에 Voice 입력이 없으면 아무 액션도 하지 마세요. 빈 배열 []을 반환하세요.",
+      "hertz": 0.5,
+      "backgrounds": [
+        { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 } },
+        { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true } },
+        { "type": "STTBg", "config": { "sample_rate": 44100 } },
+        { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" } }
+      ],
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "speak_connector",
+          "config": {
+            "enable_tts_interrupt": true,
+            "tts_backend": "naver_clova"
+          }
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_startup",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "안내를 시작하겠습니다. 목적지를 설정해주세요."
+          }
+        },
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "대기 모드로 돌아갑니다."
+          }
+        }
+      ]
+    },
+
+    // ─────────────────────────────────────────────
+    // 2. Accompany — 동행 모드
+    //    보행자와 함께 이동 + 자유 대화
+    //    speak + move 액션 모두 가능
+    //    LLM function calling으로 대화/네비게이션 의도를 자체 판단
+    // ─────────────────────────────────────────────
+    "accompany": {
+      "display_name": "동행 모드",
+      "description": "보행자와 함께 이동하며 대화. LLM이 발화 의도를 판단하여 move/speak을 선택적으로 호출.",
+      "system_prompt_base": "당신은 보행자 안내 로봇입니다. 현재 동행 모드(보행자와 함께 이동 중)입니다.\n- 반드시 한국어로 응답하세요.\n- 설정된 목적지를 향해 이동 중입니다.\n- 보행자가 말을 걸면 친절하게 응답하세요.\n\n[move 액션 규칙 — 반드시 지키세요]\n- 다음 요청에는 반드시 move와 speak을 함께 호출하세요:\n  · 목적지 설정: '북문으로 가줘' → move('go to NG') + speak, 'L8로 가줘' → move('go to L8') + speak\n  · 속도 조절: '빨리 가자', '천천히' → move('speed up' 또는 'slow down') + speak\n  · 정지: '멈춰', '잠깐', '기다려', '잠깐만' 등이 문장 어디에 포함되어 있어도 move('stop move') + speak. 예: '~다녀올게 잠깐 기다려' → move('stop move') + speak\n  · 재개: '다시 가자', '출발' → move('resume') + speak\n- 다음에는 move를 호출하지 마세요 (speak만):\n  · 일상 대화: '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n  · 질문: '얼마나 남았어?', '여기가 어디야?'\n\n[speak 액션 규칙]\n- 보행자의 모든 발화에 대해 speak으로 응답하세요.\n- 짧고 친절하게 응답하세요.\n- 보행자에게 역으로 질문하지 마세요. 보행자가 말할 때만 응답하세요.\n\n- 사전 지정된 목적지는 L8, 북문(NG) 입니다.\n- 중요: AVAILABLE INPUTS에 Voice 입력이 없으면 아무 액션도 하지 마세요. 빈 배열 []을 반환하세요.",
+      "hertz": 0.5,
+      "backgrounds": [
+        { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 } },
+        { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true } },
+        { "type": "STTBg", "config": { "sample_rate": 44100 } },
+        { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" } },
+        { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30 } },
+        { "type": "SegmentationBg", "config": {} },
+        { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
+        { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
+        { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
+        { "type": "RtkBg", "config": { "port": "/dev/gps", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "", "password": "" } },
+        { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
+        { "type": "GnssRouteBg", "config": { "waypoint_path": null, "waypoints": null, "reach_tol_m": 5.0, "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
+        { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
+        { "type": "NavigationBg", "config": { "tick_dt": 0.05, "speed_step": 0.2, "speed_min": 0.2, "speed_max": null, "calibrating_speed": 0.5 } }
+      ],
+      "agent_inputs": [
+        {
+          "type": "SoundSensor",
+          "config": {
+            "language": "korean"
+          }
+        }
+      ],
+      "agent_actions": [
+        {
+          "name": "speak",
+          "llm_label": "speak",
+          "implementation": "passthrough",
+          "connector": "speak_connector",
+          "config": {
+            "enable_tts_interrupt": true,
+            "tts_backend": "naver_clova"
+          }
+        },
+        {
+          "name": "move",
+          "llm_label": "move",
+          "connector": "move_connector"
+        }
+      ],
+      "lifecycle_hooks": [
+        {
+          "hook_type": "on_entry",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "네, 출발하겠습니다."
+          }
+        },
+        {
+          "hook_type": "on_exit",
+          "handler_type": "message",
+          "handler_config": {
+            "message": "이동을 종료합니다."
+          }
+        }
+      ]
+    }
+  },
+
+  "transition_rules": [
+    // Standby → Accompany (보행자가 말을 걸거나 목적지 설정)
+    {
+      "from_mode": "standby",
+      "to_mode": "accompany",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["안녕", "여기요", "도와줘", "hello", "hi", "help", "L8", "북문", "가줘", "이동해", "이동", "안내", "데려다"],
+      "priority": 3,
+      "cooldown_seconds": 3.0
+    },
+
+    // Accompany → Standby (목적지 도착 / 종료)
+    {
+      "from_mode": "accompany",
+      "to_mode": "standby",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["도착", "arrived", "잘가", "bye", "goodbye"],
+      "priority": 3,
+      "cooldown_seconds": 5.0
+    },
+
+    // Accompany → Standby (장시간 무입력 타임아웃)
+    {
+      "from_mode": "accompany",
+      "to_mode": "standby",
+      "transition_type": "time_based",
+      "trigger_keywords": [],
+      "priority": 1,
+      "timeout_seconds": 300.0,
+      "cooldown_seconds": 10.0
+    },
+
+    // Universal → Standby (리셋)
+    {
+      "from_mode": "*",
+      "to_mode": "standby",
+      "transition_type": "input_triggered",
+      "trigger_keywords": ["리셋", "초기화", "reset", "restart"],
+      "priority": 5,
+      "cooldown_seconds": 10.0
+    }
+  ]
+}

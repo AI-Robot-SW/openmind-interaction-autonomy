@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from providers.elevenlabs_tts_provider import ElevenLabsTTSProvider
+try:
+    from providers.tts_provider import TTSProvider
+except ImportError:
+    TTSProvider = None
 
 
 class LifecycleHookType(Enum):
@@ -98,7 +101,10 @@ class MessageHookHandler(LifecycleHookHandler):
                 logging.info(f"Lifecycle hook message: {formatted_message}")
 
                 try:
-                    ElevenLabsTTSProvider().add_pending_message(formatted_message)
+                    if TTSProvider is not None:
+                        TTSProvider().add_pending_message(formatted_message)
+                    else:
+                        logging.warning("TTSProvider not available, skipping TTS")
                 except Exception as e:
                     logging.error(f"Error adding TTS message: {e}")
                     return False

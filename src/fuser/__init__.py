@@ -4,7 +4,10 @@ import typing as T
 
 from actions import describe_action
 from inputs.base import Sensor
-from providers.io_provider import IOProvider
+try:
+    from providers.io_provider import IOProvider
+except ImportError:
+    IOProvider = None
 from runtime.single_mode.config import RuntimeConfig
 
 
@@ -38,7 +41,7 @@ class Fuser:
             Runtime configuration object.
         """
         self.config = config
-        self.io_provider = IOProvider()
+        self.io_provider = IOProvider() if IOProvider is not None else None
 
     def fuse(self, inputs: list[Sensor], finished_promises: list[T.Any]) -> str:
         """
@@ -60,15 +63,20 @@ class Fuser:
             Fused prompt string combining all inputs and context.
         """
         # Record the timestamp of the input
-        self.io_provider.fuser_start_time = time.time()
+        if self.io_provider is not None:
+            self.io_provider.fuser_start_time = time.time()
 
         input_strings = [input.formatted_latest_buffer() for input in inputs]
         logging.debug(f"InputMessageArray: {input_strings}")
 
+        inputs_fused = " ".join([s for s in input_strings if s is not None])
+
+        # 입력이 없으면 LLM 호출 불필요 (finished_promises만으로는 호출하지 않음)
+        if not inputs_fused.strip():
+            return None
+
         # Combine all inputs, memories, and configurations into a single prompt
         system_prompt = "\nBASIC CONTEXT:\n" + self.config.system_prompt_base + "\n"
-
-        inputs_fused = " ".join([s for s in input_strings if s is not None])
 
         # if we provide laws from blockchain, these override the locally stored rules
         # the rules are not provided in the system prompt, but as a separate INPUT,
@@ -78,6 +86,12 @@ class Fuser:
 
         if self.config.system_prompt_examples:
             system_prompt += "\n\nEXAMPLES:\n" + self.config.system_prompt_examples
+
+        # 저장된 목적지가 있으면 프롬프트에 주입 (모드 전환 후에도 기억)
+        if self.io_provider is not None:
+            last_dest = self.io_provider.get_dynamic_variable("last_destination")
+            if last_dest:
+                system_prompt += f"\n\n현재 설정된 목적지: {last_dest}\n이전에 설정된 목적지입니다. 사용자가 '다시 가자', '출발' 등 이동 재개를 요청하면 이 목적지({last_dest})로 이동하세요."
 
         # descriptions of possible actions
         actions_fused = ""
@@ -101,13 +115,12 @@ class Fuser:
         logging.debug(f"FINAL PROMPT: {fused_prompt}")
 
         # Record the global prompt, actions and inputs
-        self.io_provider.set_fuser_system_prompt(f"{system_prompt}")
-        self.io_provider.set_fuser_inputs(inputs_fused)
-        self.io_provider.set_fuser_available_actions(
-            f"AVAILABLE ACTIONS:\n{actions_fused}\n\n{question_prompt}"
-        )
-
-        # Record the timestamp of the output
-        self.io_provider.fuser_end_time = time.time()
+        if self.io_provider is not None:
+            self.io_provider.set_fuser_system_prompt(f"{system_prompt}")
+            self.io_provider.set_fuser_inputs(inputs_fused)
+            self.io_provider.set_fuser_available_actions(
+                f"AVAILABLE ACTIONS:\n{actions_fused}\n\n{question_prompt}"
+            )
+            self.io_provider.fuser_end_time = time.time()
 
         return fused_prompt

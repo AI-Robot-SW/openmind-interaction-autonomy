@@ -8,7 +8,11 @@ import typing as T
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm.function_schemas import generate_function_schemas_from_actions
-from providers.io_provider import IOProvider
+
+try:
+    from providers.io_provider import IOProvider
+except ImportError:
+    IOProvider = None
 
 R = T.TypeVar("R")
 
@@ -124,8 +128,8 @@ class LLM(T.Generic[R]):
                 f"LLM initialized with {len(self.function_schemas)} function schemas"
             )
 
-        # Set up the IO provider
-        self.io_provider = IOProvider()
+        # Set up the IO provider (optional — not required for core LLM functionality)
+        self.io_provider = IOProvider() if IOProvider is not None else None
 
         # Enable state management by default
         self._skip_state_management: bool = False

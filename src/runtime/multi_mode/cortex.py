@@ -113,6 +113,9 @@ class ModeCortexRuntime:
         self._pending_mode_transition: Optional[str] = None
         self._pending_transition_reason: Optional[str] = None
 
+        # Carry-over input: 모드 전환을 트리거한 발화를 새 모드의 첫 tick에 재주입
+        self._carry_over_input: Optional[str] = None
+
     async def _initialize_mode(self, mode_name: str):
         """
         Initialize the runtime with a specific mode.
@@ -510,6 +513,21 @@ class ModeCortexRuntime:
         tick_num = self.io_provider.increment_tick()
         logging.debug(f"Processing tick #{tick_num}")
 
+        # --- carry-over: 모드 전환을 트리거한 발화를 새 모드에 재주입 ---
+        # messages에 직접 주입 (message_buffer → _poll → raw_to_text 경로는
+        # 별도 async task라 race condition 발생 가능)
+        if self._carry_over_input:
+            carry = self._carry_over_input
+            self._carry_over_input = None
+            logging.info(f"Re-injecting carry-over input into new mode: {carry}")
+            from inputs.base import Message
+
+            for agent_input in self.current_config.agent_inputs:
+                if hasattr(agent_input, "messages"):
+                    agent_input.messages.append(
+                        Message(timestamp=time.time(), message=carry)
+                    )
+
         finished_promises, _ = await self.action_orchestrator.flush_promises()
 
         prompt = self.fuser.fuse(self.current_config.agent_inputs, finished_promises)
@@ -523,6 +541,13 @@ class ModeCortexRuntime:
         transition_result = await self.mode_manager.process_tick(last_input)
         if transition_result:
             new_mode, transition_reason = transition_result
+
+            # 전환을 트리거한 발화를 새 모드의 첫 tick에서 재사용하도록 보존
+            if last_input and transition_reason == "input_triggered":
+                self._carry_over_input = last_input
+                logging.info(
+                    f"Carrying over input for new mode: {last_input}"
+                )
 
             # Schedule the transition asynchronously
             self._pending_mode_transition = new_mode

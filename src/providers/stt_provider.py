@@ -245,6 +245,26 @@ class STTProvider:
             sample_rate,
         )
 
+    @property
+    def data(self) -> Optional[dict]:
+        """
+        Get the current provider data.
+
+        Returns
+        -------
+        Optional[dict]
+            Current STT provider state information.
+        """
+        with self._lock:
+            return {
+                "is_listening": self._is_listening,
+                "current_transcript": self._current_transcript,
+                "backend": self.backend.value,
+                "language_code": self.language_code,
+                "sample_rate": self.sample_rate,
+                "running": self.running,
+            }
+
     # ---- Result / Interim handlers (분리) ----
 
     def _on_result(self, transcript: str) -> None:
@@ -400,7 +420,7 @@ class STTProvider:
                 stt_queue_size = self._audio_queue.qsize()
                 if self._audio_provider is not None:
                     audio_stats = self._audio_provider.get_buffer_stats()
-                    logging.info(
+                    logging.debug(
                         "Google streaming consumed audio chunks=%d "
                         "(stt_queue=%d, audio_buffer=%d/%d, drops=%d, latency_ms=%.1f)",
                         self._audio_consumed,
@@ -411,7 +431,7 @@ class STTProvider:
                         audio_stats["approx_latency_ms"],
                     )
                 else:
-                    logging.info(
+                    logging.debug(
                         "Google streaming consumed audio chunks=%d (stt_queue=%d)",
                         self._audio_consumed,
                         stt_queue_size,

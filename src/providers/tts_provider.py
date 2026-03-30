@@ -96,7 +96,7 @@ NAVER_CLOVA_DEFAULT_CONFIG = {
     "pitch": 0,
     "emotion": 0,
     "emotion_strength": 1,
-    "format": "mp3",
+    "format": "wav",
     "sampling_rate": 24000,
     "alpha": 0,
     "end_pitch": 0,
@@ -164,13 +164,13 @@ class TTSProvider:
 
     def __init__(
         self,
-        url: str = "https://api.openmind.org/api/core/elevenlabs/tts",
+        url: str = "https://naveropenapi.apigw.ntruss.com/tts-premium/v1/tts",
         api_key: Optional[str] = None,
         backend_api_key: Optional[str] = None,
-        backend: TTSBackend = TTSBackend.ELEVENLABS,
+        backend: TTSBackend = TTSBackend.NAVER_CLOVA,
         voice_id: Optional[str] = None,
         model_id: str = "eleven_flash_v2_5",
-        output_format: str = "mp3_44100_128",
+        output_format: str = "wav",
         language: str = "ko",
         enable_tts_interrupt: bool = False,
         # Naver Clova 전용 파라미터
