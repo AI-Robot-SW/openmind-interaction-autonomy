@@ -120,12 +120,6 @@
           "config": {
             "language": "korean"
           }
-        },
-        {
-          "type": "LocationSensor",
-          "config": {
-            "localization_method": "gps"
-          }
         }
       ],
       "agent_actions": [
