@@ -7,7 +7,7 @@
   // 실행:
   //   python main.py --config pedestrian_robot_modes --mode
 
-  "version": "v2.0.0",
+  "version": "v1.0.1",
   "name": "pedestrian_robot",
   "default_mode": "standby",
   "allow_manual_switching": true,
