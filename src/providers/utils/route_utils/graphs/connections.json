@@ -1,0 +1,32 @@
+{
+  "connections": [
+    {
+      "from_graph_id": "kist_outdoor",
+      "from_node_id": 900816,
+      "to_graph_id": "building_l8_f1",
+      "to_node_id": 810000,
+      "transition_type": "enter_building"
+    },
+    {
+      "from_graph_id": "building_l8_f1",
+      "from_node_id": 810000,
+      "to_graph_id": "kist_outdoor",
+      "to_node_id": 900816,
+      "transition_type": "exit_building"
+    },
+    {
+      "from_graph_id": "building_l8_f1",
+      "from_node_id": 810046,
+      "to_graph_id": "building_l8_f2",
+      "to_node_id": 820000,
+      "transition_type": "stairs_up"
+    },
+    {
+      "from_graph_id": "building_l8_f2",
+      "from_node_id": 820000,
+      "to_graph_id": "building_l8_f1",
+      "to_node_id": 810046,
+      "transition_type": "stairs_down"
+    }
+  ]
+}
