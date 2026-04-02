@@ -42,7 +42,6 @@ if "__file__" in dir():
     if str(_src) not in sys.path:
         sys.path.insert(0, str(_src))
 
-import serial
 import yaml
 
 from actions import load_action
@@ -137,7 +136,7 @@ def parse_args():
     p.add_argument("--ethernet", default="eno1", help="Unitree Go2 Ethernet channel (e.g. eth0).")
     p.add_argument("--gnss-port", default="/dev/rtk", help="GNSS serial port.")
     p.add_argument("--gnss-baud", type=int, default=115200, help="GNSS serial baudrate.")
-    p.add_argument("--uwb-port", default=None, help="UWB serial port. Omit to run without UWB.")
+    p.add_argument("--uwb-port", default="/dev/uwb", help="UWB serial port.")
     p.add_argument("--uwb-baud", type=int, default=115200, help="UWB serial baudrate.")
     p.add_argument("--ntrip-caster", default="rts2.ngii.go.kr", help="NTRIP caster host.")
     p.add_argument("--ntrip-port", type=int, default=2101, help="NTRIP caster port.")
@@ -173,48 +172,19 @@ def setup_providers(args) -> None:
         user=args.ntrip_user,
         password=args.ntrip_password,
     )
-    if args.uwb_port:
-        uwb_ser = serial.Serial(args.uwb_port, args.uwb_baud, timeout=0.2)
-        uwb = UwbProvider(ser=uwb_ser)
-        logging.info("UwbProvider using port %s", args.uwb_port)
-    else:
-        uwb = type("DummyUwb", (), {
-            "start": lambda s: None,
-            "stop": lambda s: None,
-            "get_record": lambda s: None,
-        })()
-        logging.warning("UWB port not specified — running without UWB")
+    uwb = UwbProvider(port=args.uwb_port, baud=args.uwb_baud)
     rtk.start()
-    logging.info("RtkProvider started")
     uwb.start()
-    logging.info("UwbProvider started")
 
     # 3. Camera → Segmentation → PointCloud — required for BEV obstacle grid
     RealSenseCameraProvider(camera_index=args.camera_index).start()
-    logging.info("RealSenseCameraProvider started (index=%d)", args.camera_index)
-
     SegmentationProvider().start()
-    logging.info("SegmentationProvider started")
-
     PointCloudProvider().start()
-    logging.info("PointCloudProvider started")
-
     # 4. BEV occupancy grid + distance map — required for DWA obstacle avoidance
     BEVOccupancyGridProvider().start()
-    logging.info("BEVOccupancyGridProvider started")
-
     DistMapProvider().start()
-    logging.info("DistMapProvider started")
 
-    # 5. Navigation stack — gnss/dwa started here; NavigationProvider worker starts on set_path()
-    gnss_route = GnssRouteProvider(waypoints=[])
-    gnss_route.start()
-    logging.info("GnssRouteProvider started")
-
-    dwa = DwaRouteProvider()
-    dwa.start()
-    logging.info("DwaRouteProvider started")
-
+    # 5. Navigation stack — singleton creation only; start() is called lazily inside set_goal()
     NavigationProvider()
     logging.info("NavigationProvider singleton created")
 
@@ -223,8 +193,6 @@ def teardown_providers() -> None:
     """Stop all providers that were started in setup_providers (reverse order)."""
     for name, stop_fn in [
         ("NavigationProvider",       lambda: NavigationProvider().stop()),
-        ("DwaRouteProvider",         lambda: DwaRouteProvider().stop()),
-        ("GnssRouteProvider",        lambda: GnssRouteProvider().stop()),
         ("DistMapProvider",          lambda: DistMapProvider().stop()),
         ("BEVOccupancyGridProvider", lambda: BEVOccupancyGridProvider().stop()),
         ("PointCloudProvider",       lambda: PointCloudProvider().stop()),
@@ -238,7 +206,7 @@ def teardown_providers() -> None:
             stop_fn()
         except Exception as e:
             logging.warning("%s stop failed: %s", name, e)
-    logging.info("Providers torn down")
+    logging.info("Providers tear down")
 
 
 def build_move_connector():
@@ -329,6 +297,9 @@ def main() -> int:
 
     try:
         asyncio.run(run_sequence(connector, steps, repeat))
+        print("Sequence complete. Running until Ctrl+C...")
+        while True:
+            time.sleep(1.0)
     except KeyboardInterrupt:
         print("\nInterrupted.")
     finally:
