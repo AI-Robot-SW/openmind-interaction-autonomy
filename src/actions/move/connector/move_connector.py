@@ -6,17 +6,12 @@ from actions.move.interface import MovementAction, MoveInput
 from providers.navigation_provider import NavigationProvider
 from providers.unitree_go2_provider import UnitreeGo2Provider
 
-# Waypoint path file for each navigation destination (relative to providers/).
-# Add an entry here when a new destination path file is available.
-_DESTINATION_PATHS: dict[MovementAction, str] = {
-    MovementAction.GO_TO_L8: "utils/paths/EntL8-go2-0.75m.txt",
-    MovementAction.GO_TO_NG: "utils/paths/EntNG-go2-0.75m.txt",
+# place_id for each navigation destination.
+# Add an entry here when a new destination place is registered in the graph.
+_DESTINATION_PLACES: dict[MovementAction, str] = {
+    MovementAction.GO_TO_L8: "l8",
+    MovementAction.GO_TO_NG: "north_gate",
 }
-
-# Fixed forward speed during initial heading calibration (NavigationProvider handles
-# run-speed via vx_fixed; this constant is no longer used here but kept for reference).
-# _VX_CALIBRATING = 0.5  (now lives in NavigationProvider as calibrating_speed)
-# _VX_RUN = 0.8          (now lives in DwaRouteProvider as vx_fixed)
 
 
 class MoveConfig(ActionConfig):
@@ -50,10 +45,10 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
         action = output_interface.action
         logging.info("MoveConnector received action: %s", action)
 
-        if action in _DESTINATION_PATHS:
-            path = _DESTINATION_PATHS[action]
-            self._nav_provider.set_path(path)
-            logging.info("MoveConnector forwarded destination to NavigationProvider.set_path: %s", path)
+        if action in _DESTINATION_PLACES:
+            place_id = _DESTINATION_PLACES[action]
+            self._nav_provider.set_goal(place_id)
+            logging.info("MoveConnector forwarded destination to NavigationProvider.set_goal: %s", place_id)
 
         elif action == MovementAction.SLOW_DOWN:
             logging.info("MoveConnector forwarding speed change: slower")
@@ -89,7 +84,7 @@ class MoveConnector(ActionConnector[MoveConfig, MoveInput]):
 
     def tick(self) -> None:
         time.sleep(0.1)
-        if not (self._nav_provider.running and self._nav_provider.get_active_path() is not None):
+        if not (self._nav_provider.running and self._nav_provider.get_active_goal() is not None):
             return
 
         state = self._nav_provider.get_state()
