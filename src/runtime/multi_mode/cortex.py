@@ -198,11 +198,26 @@ class ModeCortexRuntime:
             # Set reloading flag
             self._is_reloading = True
 
+            # Save old inputs for cleanup after successful initialization
+            old_agent_inputs = (
+                list(self.current_config.agent_inputs)
+                if self.current_config and self.current_config.agent_inputs
+                else []
+            )
+
             # Stop current orchestrators
             await self._stop_current_orchestrators()
 
             # Load new mode configuration
             await self._initialize_mode(to_mode)
+
+            # Cleanup old agent inputs only after successful initialization
+            for agent_input in old_agent_inputs:
+                if hasattr(agent_input, "cleanup"):
+                    try:
+                        agent_input.cleanup()
+                    except Exception as e:
+                        logging.warning(f"Error cleaning up input {agent_input}: {e}")
 
             # Start new orchestrators
             await self._start_orchestrators()
@@ -211,7 +226,14 @@ class ModeCortexRuntime:
 
         except Exception as e:
             logging.error(f"Error during mode transition {from_mode} -> {to_mode}: {e}")
-            # TODO: Implement fallback/recovery mechanism
+            # Fallback: restart orchestrators for the previous mode
+            logging.info(f"Recovering: restarting orchestrators for previous mode '{from_mode}'")
+            try:
+                await self._initialize_mode(from_mode)
+                await self._start_orchestrators()
+                logging.info(f"Recovery successful: restored mode '{from_mode}'")
+            except Exception as recovery_error:
+                logging.error(f"Recovery also failed: {recovery_error}")
             raise
         finally:
             self._is_reloading = False
