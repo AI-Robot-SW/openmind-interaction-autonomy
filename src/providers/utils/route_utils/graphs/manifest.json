@@ -1,0 +1,29 @@
+{
+  "connections_path": "graphs/connections.json",
+  "graphs": [
+    {
+      "graph_id": "kist_outdoor",
+      "path": "graphs/kist_outdoor.json",
+      "graph_type": "outdoor",
+      "site": "kist",
+      "building": null,
+      "floor": null
+    },
+    {
+      "graph_id": "building_l8_f1",
+      "path": "graphs/building_l8_f1.json",
+      "graph_type": "indoor",
+      "site": "kist",
+      "building": "l8",
+      "floor": 1
+    },
+    {
+      "graph_id": "building_l8_f2",
+      "path": "graphs/building_l8_f2.json",
+      "graph_type": "indoor",
+      "site": "kist",
+      "building": "l8",
+      "floor": 2
+    }
+  ]
+}
