@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import time
 import typing as T
@@ -92,9 +93,19 @@ class QwenLLM(LLM[R]):
         if not config.model:
             self._config.model = "RedHatAI/Qwen3-30B-A3B-quantized.w4a16"
 
+        server_ip = os.getenv("OLLAMA_SERVER_IP")
+        if config.base_url:
+            base_url = config.base_url.rstrip("/")
+            if not base_url.endswith("/v1"):
+                base_url += "/v1"
+        elif server_ip:
+            base_url = f"http://{server_ip}:11434/v1"
+        else:
+            base_url = "http://{server_ip}:11434/v1"
+
         self._client = openai.AsyncClient(
-            base_url="http://127.0.0.1:8000/v1",
-            api_key="placeholder_key",
+            base_url=base_url,
+            api_key="ollama",
         )
 
         self._extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
