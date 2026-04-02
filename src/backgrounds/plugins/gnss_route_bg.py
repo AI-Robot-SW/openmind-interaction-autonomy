@@ -48,9 +48,8 @@ def _resolve_waypoints(
         )
         return list(tracker._coords)
 
-    raise ValueError(
-        "GnssRouteProviderBg requires either 'waypoints' or 'waypoint_path' in config"
-    )
+    logging.info("GnssRouteBg: no initial waypoints configured, starting with empty path")
+    return []
 
 
 class GnssRouteBg(Background[GnssRouteBgConfig]):
