@@ -39,6 +39,9 @@ class UwbProvider:
         self.running = False
         self._thread: Optional[threading.Thread] = None
 
+        self._last_dist_monotonic: Optional[float] = None
+        self._last_pos_monotonic: Optional[float] = None
+
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             logging.warning("UwbProvider already running")
@@ -46,49 +49,111 @@ class UwbProvider:
 
         self.ser = serial.Serial(self._port, self._baud, timeout=0.2)
 
+        self._data = None
+        self._last_dist_monotonic = None
+        self._last_pos_monotonic = None
+
+        try:
+            self._cfg_interface()
+        except Exception:
+            self.ser.close()
+            self.ser = None
+            raise
+
         self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="UwbReader")
         self._thread.start()
-
-        # 첫 레코드 도착까지 대기 — _cfg_interface가 ~1.2초 소요
-        deadline = time.monotonic() + 10.0
-        while time.monotonic() < deadline:
-            with self._lock:
-                if self._data is not None:
-                    break
-            time.sleep(0.01)
-        else:
-            raise RuntimeError("UwbProvider: timed out waiting for first record")
 
         logging.info("UwbProvider started")
 
     def stop(self) -> None:
         self.running = False
 
-        if self.ser is not None:
-            with self._write_lock:
-                self.ser.write(b"\r")
-                self.ser.flush()
-
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
         self._thread = None
 
         if self.ser is not None:
-            self.ser.close()
-            self.ser = None
+            try:
+                exited = self._exit_shell()
+                if not exited:
+                    logging.debug("UwbProvider: shell exit not confirmed")
+            except Exception:
+                logging.exception("UwbProvider: _exit_shell failed")
+            finally:
+                self.ser.close()
+                self.ser = None
 
         logging.info("UwbProvider stopped")
 
-    def _cfg_interface(self) -> None:
+    def _enter_shell(self, timeout: float = 3.0) -> None:
+        if self.ser is None:
+            raise RuntimeError("UwbProvider serial is not open")
+
         with self._write_lock:
+            self.ser.reset_input_buffer()
+            self.ser.reset_output_buffer()
+
             self.ser.write(b"\r")
-            time.sleep(0.1)
-            self.ser.write(b"\r")
-            time.sleep(1.0)
-            self.ser.write(b"lep\r")
+            self.ser.flush()
             time.sleep(0.1)
 
+            self.ser.write(b"\r")
+            self.ser.flush()
+
+        deadline = time.monotonic() + timeout
+        buf = bytearray()
+
+        while time.monotonic() < deadline:
+            chunk = self._read_some()
+            if chunk:
+                buf.extend(chunk)
+                if b"dwm>" in buf:
+                    return
+            else:
+                time.sleep(0.01)
+
+        raise RuntimeError("UwbProvider: failed to enter DWM shell")
+
+    def _exit_shell(self, timeout: float = 1.0) -> bool:
+        if self.ser is None:
+            return False
+
+        with self._write_lock:
+            self.ser.reset_input_buffer()
+
+            self.ser.write(b"lec\r")
+            self.ser.flush()
+            time.sleep(0.1)
+
+            self.ser.write(b"quit\r")
+            self.ser.flush()
+
+        deadline = time.monotonic() + timeout
+        buf = bytearray()
+
+        while time.monotonic() < deadline:
+            chunk = self._read_some()
+            if chunk:
+                buf.extend(chunk)
+                if b"bye!" in buf:
+                    return True
+            else:
+                time.sleep(0.01)
+
+        return False
+
+    def _cfg_interface(self) -> None:
+        if self.ser is None:
+            raise RuntimeError("UwbProvider serial is not open")
+
+        self._enter_shell()
+
+        with self._write_lock:
+            self.ser.reset_input_buffer()
+            self.ser.write(b"lec\r")
+            self.ser.flush()
+    
     def _read_some(self) -> bytes:
         n = int(getattr(self.ser, "in_waiting", 0) or 0)
         if n > 0:
@@ -112,7 +177,7 @@ class UwbProvider:
         return out
 
     @staticmethod
-    def _parse_lep(line: bytes) -> Optional[UwbPosRecord]:
+    def _parse_pos_line(line: bytes) -> Optional[UwbPosRecord]:
         idx = line.find(b"POS,")
         if idx < 0:
             return None
@@ -122,21 +187,21 @@ class UwbProvider:
             return None
 
         try:
-            x = float(parts[1])
-            y = float(parts[2])
-            z = float(parts[3])
-            qf = int(float(parts[4]))
+            x_m = float(parts[1])
+            y_m = float(parts[2])
+            z_m = float(parts[3])
+            quality_factor = int(float(parts[4]))
         except Exception:
             return None
 
         return UwbPosRecord(
             t_monotonic=time.monotonic(),
-            x_m=x,
-            y_m=y,
-            z_m=z,
-            quality_factor=qf,
+            x_m=x_m,
+            y_m=y_m,
+            z_m=z_m,
+            quality_factor=quality_factor,
         )
-
+    
     @property
     def data(self) -> Optional[UwbPosRecord]:
         """최신 UwbPosRecord. 데이터 수신 전에는 None."""
@@ -144,8 +209,6 @@ class UwbProvider:
             return self._data
         
     def _run(self) -> None:
-        self._cfg_interface()
-
         buf = bytearray()
 
         while self.running:
@@ -154,9 +217,16 @@ class UwbProvider:
             if not chunk:
                 time.sleep(0.01)
                 continue
-            
+
             buf.extend(chunk)
             for line in self._extract_lines(buf):
-                rec = self._parse_lep(line)
-                with self._lock:
-                    self._data = rec
+                now = time.monotonic()
+
+                if line.startswith(b"DIST,"):
+                    self._last_dist_monotonic = now
+
+                rec = self._parse_pos_line(line)
+                if rec is not None:
+                    with self._lock:
+                        self._data = rec
+                    self._last_pos_monotonic = rec.t_monotonic
