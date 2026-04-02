@@ -25,7 +25,7 @@ class UwbPosRecord:
 class UwbProvider:
     def __init__(
         self,
-        port: str = "/dev/ttyACM0",
+        port: str = "/dev/uwb",
         baud: int = 115200,
     ):
         self._port = port
