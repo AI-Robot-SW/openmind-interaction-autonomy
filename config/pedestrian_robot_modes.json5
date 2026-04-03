@@ -20,14 +20,12 @@
   "system_prompt_examples": "다음은 당신이 겪을 수 있는 상호작용 예시입니다:\n\n1. 보행자가 '북문으로 가줘'라고 하면:\n    Move: 'go to NG'\n    Speak: '네, 현재 목적지는 북문입니다. 북문으로 출발하겠습니다.'\n\n2. 이동 중 보행자가 '좀 더 빨리 가자'라고 하면:\n    Move: 'speed up'\n    Speak: '네, 좀 더 빨리 가겠습니다.'\n\n3. 이동 중 보행자가 '천천히'라고 하면:\n    Move: 'slow down'\n    Speak: '네, 속도를 줄이겠습니다.'\n\n4. 이동 중 보행자가 '얼마나 남았어?'라고 물으면:\n    Speak: '목적지까지 약 N미터 남았습니다.' (move 호출 불필요)\n\n5. 목적지에 도착하면:\n    Move: 'stop move'\n    Speak: '북문에 도착하였습니다. 안내를 종료합니다.'\n\n6. 보행자가 사전 지정되지 않은 목적지(예: '도서관으로 가줘')를 말하면:\n    Speak: '해당 목적지는 지정되어 있지 않습니다. 다시 한번 목적지를 설정해주세요.' (move 호출 불필요)\n\n7. 보행자가 일상 대화를 하면 (예: '날씨 좋다', '저 새 위험하게 노네'):\n    Speak: 자연스럽게 대화 응답 (move 호출 불필요)\n\n8. 보행자가 '잠깐 멈춰'라고 하면:\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다.'\n\n9. 보행자가 다른 용무와 함께 기다려달라고 하면 (예: '~다녀올게 잠깐 기다려', '~할게 잠깐만'):\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다. 다녀오세요.'\n\n10. 보행자가 '다시 가자'라고 하면:\n    Move: 'resume'\n    Speak: '네, 다시 출발하겠습니다.'",
 
   "cortex_llm": {
-    "type": "ExaoneOllamaLLM",
+    "type": "OpenAILLM",
     "config": {
       "agent_name": "pedestrian_robot",
-      "base_url": "http://{server_ip}:11434",
-      "model": "exaone3.5:7.8b",
-      "temperature": 0.7,
-      "num_ctx": 4096,
-      "timeout": 120,
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-4.1-mini",
+      "timeout": 60,
       "history_length": 10
     }
   },
