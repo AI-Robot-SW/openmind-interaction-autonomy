@@ -83,6 +83,11 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
             config.language,
         )
 
+    def cleanup(self) -> None:
+        """모드 전환 시 STTProvider 콜백 해제."""
+        self._stt_provider.unregister_result_callback(self._handle_stt_result)
+        logging.debug("SoundSensor cleanup: STT callback unregistered")
+
     def _handle_stt_result(self, text: str) -> None:
         """STT 결과 콜백 핸들러."""
         if text and len(text.strip()) > 0:

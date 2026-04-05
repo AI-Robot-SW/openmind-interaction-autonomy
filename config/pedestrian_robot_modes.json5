@@ -74,14 +74,14 @@
           "hook_type": "on_startup",
           "handler_type": "message",
           "handler_config": {
-            "message": "안내를 시작하겠습니다. 목적지를 설정해주세요."
+            "message": "현재는 대기 모드입니다. 주행을 하고자 하시면 '주행 모드' 또는 '안내 시작'이라고 말씀해주세요."
           }
         },
         {
           "hook_type": "on_entry",
           "handler_type": "message",
           "handler_config": {
-            "message": "대기 모드로 돌아갑니다."
+            "message": "대기 모드로 돌아갑니다. 주행을 하고자 하시면 '주행 모드' 또는 '안내 시작'이라고 말씀해주세요."
           }
         }
       ]
@@ -96,7 +96,7 @@
     "accompany": {
       "display_name": "동행 모드",
       "description": "보행자와 함께 이동하며 대화. LLM이 발화 의도를 판단하여 move/speak을 선택적으로 호출.",
-      "system_prompt_base": "당신은 보행자 안내 로봇입니다. 현재 동행 모드(보행자와 함께 이동 중)입니다.\n- 반드시 한국어로 응답하세요.\n- 설정된 목적지를 향해 이동 중입니다.\n- 보행자가 말을 걸면 친절하게 응답하세요.\n\n[move 액션 규칙 — 반드시 지키세요]\n- 다음 요청에는 반드시 move와 speak을 함께 호출하세요:\n  · 목적지 설정: '북문으로 가줘' → move('go to NG') + speak, 'L8로 가줘' → move('go to L8') + speak\n  · 속도 조절: '빨리 가자', '천천히' → move('speed up' 또는 'slow down') + speak\n  · 정지: '멈춰', '잠깐', '기다려', '잠깐만' 등이 문장 어디에 포함되어 있어도 move('stop move') + speak. 예: '~다녀올게 잠깐 기다려' → move('stop move') + speak\n  · 재개: '다시 가자', '출발' → move('resume') + speak\n- 다음에는 move를 호출하지 마세요 (speak만):\n  · 일상 대화: '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n  · 질문: '얼마나 남았어?', '여기가 어디야?'\n\n[speak 액션 규칙]\n- 보행자의 모든 발화에 대해 speak으로 응답하세요.\n- 짧고 친절하게 응답하세요.\n- 보행자에게 역으로 질문하지 마세요. 보행자가 말할 때만 응답하세요.\n\n- 사전 지정된 목적지는 L8, 북문(NG) 입니다.\n- 중요: AVAILABLE INPUTS에 Voice 입력이 없으면 아무 액션도 하지 마세요. 빈 배열 []을 반환하세요.",
+      "system_prompt_base": "당신은 보행자 안내 로봇입니다. 현재 동행 모드(보행자와 함께 이동 중)입니다.\n- 반드시 한국어로 응답하세요.\n- 설정된 목적지를 향해 이동 중입니다.\n- 보행자가 말을 걸면 친절하게 응답하세요.\n\n[move 액션 규칙 — 반드시 지키세요]\n- 다음 요청에는 반드시 move와 speak을 함께 호출하세요:\n  · 목적지 설정: '북문으로 가줘' → move('go to NG') + speak, 'L8로 가줘' → move('go to L8') + speak\n  · 속도 조절: '빨리 가자', '천천히' → move('speed up' 또는 'slow down') + speak\n  · 정지: '멈춰', '잠깐', '기다려', '잠깐만' 등이 문장 어디에 포함되어 있어도 move('stop move') + speak. 예: '~다녀올게 잠깐 기다려' → move('stop move') + speak\n  · 재개: '다시 가자', '출발' → move('resume') + speak\n- 다음에는 move를 호출하지 마세요 (speak만):\n  · 일상 대화: '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n  · 질문: '얼마나 남았어?', '여기가 어디야?'\n\n[speak 액션 규칙]\n- 보행자의 모든 발화에 대해 speak으로 응답하세요.\n- 짧고 친절하게 응답하세요.\n- 보행자에게 역으로 질문하지 마세요. 보행자가 말할 때만 응답하세요.\n\n- 사전 지정된 목적지는 L8, 북문(NG) 입니다.\n- 중요: 목적지가 아직 설정되지 않은 경우(프롬프트에 '현재 설정된 목적지'가 없는 경우), 속도 조절/정지/재개 등의 move를 호출하지 마세요. 먼저 목적지를 설정하도록 안내하세요.\n- 중요: AVAILABLE INPUTS에 Voice 입력이 없으면 아무 액션도 하지 마세요. 빈 배열 []을 반환하세요.",
       "hertz": 0.5,
       "backgrounds": [
         { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 } },
@@ -108,9 +108,10 @@
         { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
         { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
         { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
-        { "type": "RtkBg", "config": { "port": "/dev/gps", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "", "password": "" } },
+        { "type": "RtkBg", "config": { "port": "/dev/ttyACM0", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "", "password": "" } },
+
         { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
-        { "type": "GnssRouteBg", "config": { "waypoint_path": null, "waypoints": null, "reach_tol_m": 5.0, "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
+        { "type": "GnssRouteBg", "config": {"max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
         { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
         { "type": "NavigationBg", "config": { "tick_dt": 0.05, "speed_step": 0.2, "speed_min": 0.2, "speed_max": null, "calibrating_speed": 0.5 } }
       ],
@@ -144,7 +145,7 @@
           "hook_type": "on_entry",
           "handler_type": "message",
           "handler_config": {
-            "message": "네, 출발하겠습니다."
+            "message": "안내를 시작하겠습니다. 목적지를 말씀해주세요."
           }
         },
         {
@@ -164,7 +165,7 @@
       "from_mode": "standby",
       "to_mode": "accompany",
       "transition_type": "input_triggered",
-      "trigger_keywords": ["안녕", "여기요", "도와줘", "hello", "hi", "help", "L8", "북문", "가줘", "이동해", "이동", "안내", "데려다"],
+      "trigger_keywords": ["동행 모드", "주행 모드", "안내 시작", "안내 모드"],
       "priority": 3,
       "cooldown_seconds": 3.0
     },
