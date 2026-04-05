@@ -13,6 +13,8 @@ from providers.gnss_route_provider import GnssRouteProvider, WaypointTracker
 
 
 class GnssRouteBgConfig(BackgroundConfig):
+    # TODO : 수정된 GnssRouteProvider의 초기화 파라미터 반영 (max_vx, max_vyaw)
+
     waypoint_path: Optional[str] = Field(
         default=None,
         description="Path to waypoint CSV file with lat/lon columns",
@@ -35,6 +37,7 @@ class GnssRouteBgConfig(BackgroundConfig):
     )
 
 
+# TODO : 불필요 필드 제거 또는 수정
 def _resolve_waypoints(
     config: GnssRouteBgConfig,
 ) -> List[Tuple[float, float]]:
@@ -62,6 +65,7 @@ class GnssRouteBg(Background[GnssRouteBgConfig]):
     def __init__(self, config: GnssRouteBgConfig):
         super().__init__(config)
 
+        # TODO : GnssRouteProvider의 초기화 파라미터 반영 (max_vx, max_vyaw)
         self.gnss_route_provider = GnssRouteProvider(
             waypoints=_resolve_waypoints(self.config),
             reach_tol_m=self.config.reach_tol_m,
