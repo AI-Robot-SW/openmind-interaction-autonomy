@@ -245,6 +245,17 @@ class ModeCortexRuntime:
 
         self.sleep_ticker_provider.skip_sleep = True
 
+        if self.background_orchestrator:
+            self.background_orchestrator.stop()
+        
+        if self.simulator_orchestrator:
+            logging.debug("Stopping simulator orchestrator")
+            self.simulator_orchestrator.stop()
+
+        if self.action_orchestrator:
+            logging.debug("Stopping action orchestrator")
+            self.action_orchestrator.stop()
+
         tasks_to_cancel = {}
 
         if self.cortex_loop_task and not self.cortex_loop_task.done():
