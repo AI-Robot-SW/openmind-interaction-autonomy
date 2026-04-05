@@ -121,6 +121,15 @@
           "config": {
             "language": "korean"
           }
+        },
+        {
+          "type": "LocationSensor",
+          "config": {
+            "poll_interval_s": 1.0,
+            "enable_gps": true,
+            "enable_uwb": false,
+            "enable_navigation": true
+          }
         }
       ],
       "agent_actions": [
