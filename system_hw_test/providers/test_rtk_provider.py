@@ -36,8 +36,8 @@ _FIX_TYPE  = {0: "No fix", 1: "Dead reckoning", 2: "2D", 3: "3D", 4: "GNSS+DR", 
 
 def main() -> int:
     p = argparse.ArgumentParser(description="RtkProvider hardware test")
-    p.add_argument("--user",     default="",     help="NTRIP username")
-    p.add_argument("--password", default="", help="NTRIP password")
+    p.add_argument("--user",     default="dori0126", help="NTRIP username")
+    p.add_argument("--password", default="ngii", help="NTRIP password")
     args = p.parse_args()
 
     # -------------------------------------------------------------------------
