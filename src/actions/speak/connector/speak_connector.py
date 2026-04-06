@@ -13,6 +13,7 @@ Dependencies:
     - SpeakerProvider: 오디오 출력 (Singleton, interrupt용)
 """
 
+import time
 import logging
 from typing import Optional
 
@@ -23,6 +24,7 @@ from actions.speak.interface import SpeakInput
 
 from providers.tts_provider import TTSBackend, TTSProvider
 from providers.speaker_provider import SpeakerProvider
+
 
 
 class SpeakConnectorConfig(ActionConfig):
@@ -97,3 +99,18 @@ class SpeakConnector(ActionConnector[SpeakConnectorConfig, SpeakInput]):
         self._tts_provider.add_pending_message(text)
 
         logging.debug("SpeakConnector: text queued for TTS: %s", text[:50])
+
+    def tick(self) -> None:
+        """
+        베이스 ActionConnector.tick()의 time.sleep(60) 기본 구현을 오버라이드.
+
+        ActionOrchestrator._run_connector_loop은 stop_event를 while 헤드에서만
+        확인하므로, 기본 구현(60초 sleep)을 그대로 쓰면 모드 전환 시
+        action_orchestrator.stop() 내부의 shutdown(wait=True)가 최대 60초까지
+        asyncio 이벤트 루프를 블록한다.
+
+        TTS 처리는 TTSProvider(background)가 담당하므로 여기서는 할 일이 없고,
+        stop에 빠르게 반응할 수 있도록 짧은 슬립만 유지한다.
+        """
+        time.sleep(0.1)
+
