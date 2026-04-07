@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from llm import LLM, LLMConfig
 from llm.function_schemas import convert_function_calls_to_actions
 from llm.output_model import CortexOutputModel
-from providers.avatar_llm_state_provider import AvatarLLMState
 from providers.llm_history_manager import LLMHistoryManager
 
 R = T.TypeVar("R", bound=BaseModel)
@@ -54,14 +53,13 @@ class OpenAILLM(LLM[R]):
             self._config.model = "gpt-4.1-mini"
 
         self._client = openai.AsyncClient(
-            base_url=config.base_url or "https://api.openmind.org/api/core/openai",
+            base_url=config.base_url or "https://api.openmind.com/api/core/openai",
             api_key=config.api_key,
         )
 
         # Initialize history manager
         self.history_manager = LLMHistoryManager(self._config, self._client)
 
-    @AvatarLLMState.trigger_thinking()
     @LLMHistoryManager.update_history()
     async def ask(
         self, prompt: str, messages: T.List[T.Dict[str, str]] = []
