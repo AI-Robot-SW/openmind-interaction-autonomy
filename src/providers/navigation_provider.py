@@ -182,7 +182,8 @@ class NavigationProvider:
 
     def pause(self) -> None:
         """속도를 0으로 설정합니다. 경로와 내비게이션 스레드는 유지됩니다."""
-        self._speed_before_pause = float(self._dwa.vx_fixed)
+        if self._speed_before_pause is None:
+            self._speed_before_pause = float(self._dwa.vx_fixed)
         self._dwa.vx_fixed = 0.0
         logger.info("NavigationProvider.pause: speed %.2f -> 0.0 m/s", self._speed_before_pause)
 
