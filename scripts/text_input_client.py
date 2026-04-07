@@ -21,7 +21,7 @@ async def chat(host: str, port: int) -> None:
     try:
         async with websockets.connect(uri) as ws:
             print(f"Connected to {uri}. Type a message and press Enter. (Ctrl+C to quit)\n")
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             while True:
                 try:
                     text = await loop.run_in_executor(None, sys.stdin.readline)

@@ -93,7 +93,7 @@ class TextSensor(FuserInput[TextSensorConfig, Optional[str]]):
         except Exception as e:
             logging.error("Failed to start TextSensor WebSocket server: %s", e)
 
-    async def _handle_client(self, websocket, path: str) -> None:
+    async def _handle_client(self, websocket) -> None:
         self._connected_clients.add(websocket)
         logging.info(
             "TextSensor: client connected (total: %d)", len(self._connected_clients)
