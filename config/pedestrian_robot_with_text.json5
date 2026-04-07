@@ -1,6 +1,10 @@
 {
   // HW 디버그용 단일 모드 설정
-  // LLM 없이 하드웨어 background 전체를 동작시키며 실시간 시각화를 확인한다.
+  // 하드웨어 background 전체를 동작시키며 실시간 시각화를 확인한다.
+  // LLM 텍스트 입력: WebSocket(ws://localhost:8765)으로 텍스트를 전송
+  //
+  //   wscat -c ws://localhost:8765
+  //   > 북문으로 가줘
   //
   // 실행:
   //   uv run python src/run.py pedestrian_robot_hw_test
@@ -9,26 +13,28 @@
   "name": "pedestrian_robot_hw_test",
   "hertz": 0.5,
 
-  "system_prompt_base": "",
+  "system_prompt_base": "당신은 보행자 안내 로봇입니다. 반드시 한국어로 응답하세요. 친절하고 자연스럽게 대화하세요.",
   "system_governance": "",
   "system_prompt_examples": "",
 
   "cortex_llm": {
-    "type": "PassthroughLLM",
-    "config": {}
+    "type": "OpenAILLM",
+    "config": {
+      "agent_name": "pedestrian_robot_hw_test",
+      "base_url": "https://api.openai.com/v1",
+      "model": "gpt-5.4",
+      "timeout": 120,
+      "history_length": 10
+    }
   },
 
   "backgrounds": [
-    { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 } },
-    { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true } },
-    { "type": "STTBg", "config": { "sample_rate": 44100 } },
-    { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" } },
     { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30 } },
     { "type": "SegmentationBg", "config": {} },
     { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
     { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
     { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
-    { "type": "RtkBg", "config": { "port": "/dev/ttyACM0", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
+    { "type": "RtkBg", "config": { "port": "/dev/rtk", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
     { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
     { "type": "GnssRouteBg", "config": { "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
     { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
@@ -45,8 +51,28 @@
         "enable_uwb": false,
         "enable_navigation": true
       }
+    },
+    {
+      "type": "TextSensor",
+      "config": {
+        "host": "0.0.0.0",
+        "port": 8765
+      }
     }
   ],
 
-  "agent_actions": []
+  "agent_actions": [
+    {
+      "name": "speak",
+      "llm_label": "speak",
+      "implementation": "passthrough",
+      "connector": "console_connector",
+      "config": {}
+    },
+    {
+      "name": "move",
+      "llm_label": "move",
+      "connector": "move_connector"
+    }
+  ]
 }
