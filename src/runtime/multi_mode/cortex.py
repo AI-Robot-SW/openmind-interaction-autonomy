@@ -463,6 +463,8 @@ class ModeCortexRuntime:
                     await asyncio.gather(*awaitables)
 
                 except asyncio.CancelledError:
+                    if not self._is_reloading:
+                        raise
                     logging.debug(
                         "Tasks cancelled during mode transition, continuing..."
                     )

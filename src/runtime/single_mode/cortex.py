@@ -186,6 +186,8 @@ class CortexRuntime:
                     await asyncio.gather(*awaitables)
 
                 except asyncio.CancelledError:
+                    if not self._is_reloading:
+                        raise
                     logging.debug("Tasks cancelled during config reload, continuing...")
                     await asyncio.sleep(0.1)
 
