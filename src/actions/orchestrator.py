@@ -3,7 +3,6 @@ import logging
 import threading
 import time
 import typing as T
-from concurrent.futures import ThreadPoolExecutor
 
 from actions.base import AgentAction
 from llm.output_model import Action
@@ -19,20 +18,14 @@ class ActionOrchestrator:
 
     promise_queue: T.List[asyncio.Task[T.Any]]
     _config: RuntimeConfig
-    _connector_workers: int
-    _connector_executor: ThreadPoolExecutor
+    _threads: list[threading.Thread]
     _submitted_connectors: T.Set[str]
     _stop_event: threading.Event
 
     def __init__(self, config: RuntimeConfig):
         self._config = config
         self.promise_queue = []
-        self._connector_workers = (
-            min(12, len(config.agent_actions)) if config.agent_actions else 1
-        )
-        self._connector_executor = ThreadPoolExecutor(
-            max_workers=self._connector_workers,
-        )
+        self._threads = []
         self._submitted_connectors = set()
         self._stop_event = threading.Event()
 
@@ -46,7 +39,14 @@ class ActionOrchestrator:
                     f"Connector {agent_action.llm_label} already submitted, skipping."
                 )
                 continue
-            self._connector_executor.submit(self._run_connector_loop, agent_action)
+            thread = threading.Thread(
+                target=self._run_connector_loop,
+                args=(agent_action,),
+                name=f"action-worker-{agent_action.llm_label}",
+                daemon=True,
+            )
+            thread.start()
+            self._threads.append(thread)
             self._submitted_connectors.add(agent_action.llm_label)
 
         return asyncio.Future()  # Return future for compatibility
@@ -137,12 +137,22 @@ class ActionOrchestrator:
         await agent_action.connector.connect(input_interface)
         return input_interface
 
-    def stop(self):
+    def stop(self, timeout: float = 3.0):
         """
-        Stop the action executor and wait for all tasks to complete.
+        Stop all action threads.
+        Signals threads to stop and waits up to `timeout` seconds for them to finish.
+        Threads are daemon threads, so they won't block process exit regardless.
         """
         self._stop_event.set()
-        self._connector_executor.shutdown(wait=True)
+        deadline = time.monotonic() + timeout
+        for thread in self._threads:
+            remaining = max(0.0, deadline - time.monotonic())
+            thread.join(timeout=remaining)
+        still_running = [t.name for t in self._threads if t.is_alive()]
+        if still_running:
+            logging.warning(
+                f"ActionOrchestrator: threads still running after timeout: {still_running}"
+            )
 
     def __del__(self):
         """
