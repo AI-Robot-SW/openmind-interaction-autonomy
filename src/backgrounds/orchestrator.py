@@ -2,7 +2,6 @@ import asyncio
 import logging
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 
 from backgrounds.base import Background
 from runtime.multi_mode.config import RuntimeConfig
@@ -14,8 +13,7 @@ class BackgroundOrchestrator:
     """
 
     _config: RuntimeConfig
-    _background_workers: int
-    _background_executor: ThreadPoolExecutor
+    _threads: list[threading.Thread]
     _submitted_backgrounds: set[str]
     _stop_event: threading.Event
 
@@ -29,18 +27,13 @@ class BackgroundOrchestrator:
             Configuration object for the runtime.
         """
         self._config = config
-        self._background_workers = (
-            min(12, len(config.backgrounds)) if config.backgrounds else 1
-        )
-        self._background_executor = ThreadPoolExecutor(
-            max_workers=self._background_workers,
-        )
+        self._threads = []
         self._submitted_backgrounds = set()
         self._stop_event = threading.Event()
 
     def start(self):
         """
-        Start background tasks in separate threads.
+        Start background tasks in separate daemon threads.
         Injects _orchestrator_stop_event into each background so run() can exit when stopping.
         """
         for background in self._config.backgrounds:
@@ -50,7 +43,14 @@ class BackgroundOrchestrator:
                 )
                 continue
             background._orchestrator_stop_event = self._stop_event
-            self._background_executor.submit(self._run_background_loop, background)
+            thread = threading.Thread(
+                target=self._run_background_loop,
+                args=(background,),
+                name=f"bg-worker-{background.name}",
+                daemon=True,
+            )
+            thread.start()
+            self._threads.append(thread)
             self._submitted_backgrounds.add(background.name)
 
         return asyncio.Future()
@@ -58,8 +58,7 @@ class BackgroundOrchestrator:
     def _run_background_loop(self, background: Background):
         """
         Thread-based background loop.
-        Calls run() until stop is requested; after stop_event is set,
-        run() is invoked one more time so the background can perform cleanup.
+        Calls run() until stop is requested.
 
         Parameters
         ----------
@@ -75,15 +74,26 @@ class BackgroundOrchestrator:
             if self._stop_event.is_set():
                 break
 
-    def stop(self):
+    def stop(self, timeout: float = 3.0):
         """
-        Stop the background executor and wait for all tasks to complete.
+        Stop all background threads.
+        Signals threads to stop and waits up to `timeout` seconds for them to finish.
+        Threads are daemon threads, so they won't block process exit regardless.
         """
         self._stop_event.set()
-        self._background_executor.shutdown(wait=True)
+        deadline = time.monotonic() + timeout
+        for thread in self._threads:
+            remaining = max(0.0, deadline - time.monotonic())
+            thread.join(timeout=remaining)
+        still_running = [t.name for t in self._threads if t.is_alive()]
+        if still_running:
+            logging.warning(
+                f"BackgroundOrchestrator: threads still running after timeout: {still_running}"
+            )
+        logging.info("BackgroundOrchestrator stopped")
 
     def __del__(self):
         """
-        Clean up the BackgroundOrchestrator by stopping the executor.
+        Clean up the BackgroundOrchestrator by stopping threads.
         """
         self.stop()

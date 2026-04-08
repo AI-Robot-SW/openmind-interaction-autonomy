@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import threading
+import time
 import typing as T
-from concurrent.futures import ThreadPoolExecutor
 
 from llm.output_model import Action
 from runtime.single_mode.config import RuntimeConfig
@@ -17,20 +17,14 @@ class SimulatorOrchestrator:
 
     promise_queue: T.List[asyncio.Task[T.Any]]
     _config: RuntimeConfig
-    _simulator_workers: int
-    _simulator_executor: ThreadPoolExecutor
+    _threads: list[threading.Thread]
     _submitted_simulators: T.Set[str]
     _stop_event: threading.Event
 
     def __init__(self, config: RuntimeConfig):
         self._config = config
         self.promise_queue = []
-        self._simulator_workers = (
-            min(12, len(config.simulators)) if config.simulators else 1
-        )
-        self._simulator_executor = ThreadPoolExecutor(
-            max_workers=self._simulator_workers,
-        )
+        self._threads = []
         self._submitted_simulators = set()
         self._stop_event = threading.Event()
 
@@ -44,7 +38,14 @@ class SimulatorOrchestrator:
                     f"Simulator {simulator.name} already submitted, skipping."
                 )
                 continue
-            self._simulator_executor.submit(self._run_simulator_loop, simulator)
+            thread = threading.Thread(
+                target=self._run_simulator_loop,
+                args=(simulator,),
+                name=f"sim-worker-{simulator.name}",
+                daemon=True,
+            )
+            thread.start()
+            self._threads.append(thread)
             self._submitted_simulators.add(simulator.name)
 
         return asyncio.Future()
@@ -119,15 +120,25 @@ class SimulatorOrchestrator:
         simulator.sim(actions)
         return None
 
-    def stop(self):
+    def stop(self, timeout: float = 3.0):
         """
-        Stop the simulator executor and wait for all tasks to complete.
+        Stop all simulator threads.
+        Signals threads to stop and waits up to `timeout` seconds for them to finish.
+        Threads are daemon threads, so they won't block process exit regardless.
         """
         self._stop_event.set()
-        self._simulator_executor.shutdown(wait=True)
+        deadline = time.monotonic() + timeout
+        for thread in self._threads:
+            remaining = max(0.0, deadline - time.monotonic())
+            thread.join(timeout=remaining)
+        still_running = [t.name for t in self._threads if t.is_alive()]
+        if still_running:
+            logging.warning(
+                f"SimulatorOrchestrator: threads still running after timeout: {still_running}"
+            )
 
     def __del__(self):
         """
-        Clean up the SimulatorOrchestrator by stopping the executor.
+        Clean up the SimulatorOrchestrator by stopping threads.
         """
         self.stop()
