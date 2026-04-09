@@ -9,7 +9,6 @@ import openai
 from pydantic import BaseModel, Field
 
 from llm import LLM, LLMConfig, get_llm_class
-from providers.avatar_llm_state_provider import AvatarLLMState
 from providers.llm_history_manager import LLMHistoryManager
 
 R = T.TypeVar("R", bound=BaseModel)
@@ -279,7 +278,6 @@ Respond with ONLY a single word: either "A" or "B" for the better response."""
         winner = await self._evaluate_quality(local_entry, cloud_entry, prompt)
         return local_entry if winner == "local" else cloud_entry
 
-    @AvatarLLMState.trigger_thinking()
     @LLMHistoryManager.update_history()
     async def ask(
         self, prompt: str, messages: T.List[T.Dict[str, T.Any]] = []
