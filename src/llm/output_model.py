@@ -11,12 +11,15 @@ class Action(BaseModel):
         Type of action to execute, such as 'move' or 'speak'
     value : str
         The action argument, such as the magnitude of a movement or the sentence to speak
+    interrupt : bool
+        Whether to interrupt the current action (e.g., stop ongoing TTS playback)
     """
 
     type: str = Field(
         ..., description="The specific type of action, such as 'move' or 'speak'"
     )
     value: str = Field(..., description="The action argument")
+    interrupt: bool = Field(False, description="Whether to interrupt the current action")
 
 
 class CortexOutputModel(BaseModel):

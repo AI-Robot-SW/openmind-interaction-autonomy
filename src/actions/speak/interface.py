@@ -17,7 +17,7 @@ class SpeakInput:
     """
 
     action: str
-    interrupt: bool = True
+    interrupt: bool = False
 
 
 @dataclass

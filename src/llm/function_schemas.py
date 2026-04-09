@@ -166,7 +166,10 @@ def convert_function_calls_to_actions(function_calls: list[dict]) -> list[Action
             if not action_value and args:
                 action_value = str(list(args.values())[0])
 
-            action = Action(type=function_name, value=action_value)
+            raw_interrupt = args.get("interrupt", False)
+            if isinstance(raw_interrupt, str):
+                raw_interrupt = raw_interrupt.lower() == "true"
+            action = Action(type=function_name, value=action_value, interrupt=raw_interrupt)
             actions.append(action)
 
             logging.info(
