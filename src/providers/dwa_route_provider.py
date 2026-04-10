@@ -176,7 +176,6 @@ class DwaRouteProvider:
                 g = self._gnss.data
                 dx_in = float(g.dx)
                 dy_in = float(g.dy)
-                heading_ok = bool(g.heading_calibrated)
                 reached = bool(g.reached_goal)
 
                 if reached:
@@ -184,17 +183,6 @@ class DwaRouteProvider:
                             t_monotonic=time.monotonic(),
                             mode="STOP",
                             stop_reason="gnss_reached_goal",
-                    )
-                    with self._lock:
-                        self._data = rec
-                    time.sleep(0.1)
-                    continue
-
-                if not heading_ok:
-                    rec = DwaRouteRecord(
-                            t_monotonic=time.monotonic(),
-                            mode="STOP",
-                            stop_reason="gnss_heading_not_calibrated",
                     )
                     with self._lock:
                         self._data = rec
