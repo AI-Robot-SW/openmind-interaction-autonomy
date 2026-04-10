@@ -13,7 +13,7 @@ from .singleton import singleton
 from .rtk_provider import RtkProvider
 from .unitree_go2_provider import UnitreeGo2Provider
 
-from .utils.geo_utils import latlon_to_west_north_offset_m, wrap_deg
+from .utils.geo_utils import latlon_to_west_north_offset_m
 from .utils.route_utils.graph_utils import PathTracker
 
 
@@ -25,7 +25,7 @@ from .utils.route_utils.graph_utils import PathTracker
 class GnssRouteRecord:
     """
     t_monotonic        : 생성 시각 (monotonic)
-    heading_calibrated : 초기 heading calibration 완료 여부
+    heading_calibrated : yaw offset KF 수렴 여부 (NavigationProvider가 주입)
     reached_goal       : 경로 최종 도달 여부
     dx                 : 목표 waypoint x 오프셋 (robot body frame, meters)
     dy                 : 목표 waypoint y 오프셋 (robot body frame, meters)
@@ -48,7 +48,7 @@ class GnssRouteProvider:
     """
     background thread에서 GNSS/odometry 데이터를 읽어 PathTracker 기반으로 경로를 추종하고
     최신 결과를 GnssRouteRecord로 계산해 data 프로퍼티로 노출한다.
-    heading calibration과 경로 추종 제어를 내부에서 수행한다.
+    yaw offset과 heading calibration 상태는 NavigationProvider가 주입한다.
     """
 
     def __init__(
@@ -71,19 +71,16 @@ class GnssRouteProvider:
         self._tracker: Optional[PathTracker] = None
 
         # ---- runtime state (accessed only from control thread) ----
-        self._heading_calibrated: bool = False
         self._reached_goal: bool = False
         self._yaw_offset_deg: float = 0.0
-        self.yaw_update_move_thresh_m: float = 16.0
-        self.yaw_update_alpha: float = 0.1
+        self._heading_calibrated: bool = False
         self.heading_margin_rad: float = math.radians(45)
 
-    def set_yaw_offset(self, yaw_offset_deg: float) -> None:
-        """NavigationProvider가 캘리브레이션을 완료한 뒤 yaw_offset을 주입한다."""
+    def set_yaw_offset(self, yaw_offset_deg: float, heading_calibrated: bool = False) -> None:
+        """NavigationProvider가 매 tick 주입하는 yaw offset과 KF 수렴 여부."""
         with self._lock:
             self._yaw_offset_deg = yaw_offset_deg
-        self._heading_calibrated = True
-        logging.info("GnssRouteProvider: yaw_offset_deg=%.2f° injected", yaw_offset_deg)
+            self._heading_calibrated = heading_calibrated
 
     def set_tracker(self, tracker: Optional[PathTracker]) -> None:
         """새 PathTracker를 설정한다. None이면 경로를 초기화한다."""
@@ -129,10 +126,6 @@ class GnssRouteProvider:
         PathTracker를 따라 주행한다.
         tracker가 교체되거나 경로가 완료되거나 running이 False가 되면 반환한다.
         """
-        gnss = self.rtk_provider.data
-        lat_snap, lon_snap = gnss.lat, gnss.lon
-        odom_snap = self.unitree_go2_provider.get_odometry()
-
         logging.info(
             "GnssRouteProvider: mission active, following %d nodes",
             tracker.progress[1],
@@ -147,7 +140,10 @@ class GnssRouteProvider:
             gnss = self.rtk_provider.data
             lat_cur, lon_cur = gnss.lat, gnss.lon
             odom = self.unitree_go2_provider.get_odometry()
-            global_heading = math.degrees(odom.yaw) + self._yaw_offset_deg
+            with self._lock:
+                yaw_offset_deg = self._yaw_offset_deg
+                heading_calibrated = self._heading_calibrated
+            global_heading = math.degrees(odom.yaw) + yaw_offset_deg
 
             tracker.update(lat_cur, lon_cur, hAcc_m=gnss.hAcc_m)
 
@@ -169,22 +165,6 @@ class GnssRouteProvider:
                 time.sleep(0.1)
                 continue
 
-            # odometry yaw drift 보정
-            snap_w, snap_n = latlon_to_west_north_offset_m(lat_snap, lon_snap, lat_cur, lon_cur)
-            if math.hypot(snap_w, snap_n) > self.yaw_update_move_thresh_m:
-                gnss_heading = math.degrees(math.atan2(snap_w, snap_n))
-                odom_dx = odom.x - odom_snap.x
-                odom_dy = odom.y - odom_snap.y
-                if abs(odom_dx) > 1e-6 or abs(odom_dy) > 1e-6:
-                    odom_travel_deg = math.degrees(math.atan2(odom_dy, odom_dx))
-                    yaw_offset_new_deg = wrap_deg(gnss_heading - odom_travel_deg)
-                    with self._lock:
-                        delta = wrap_deg(yaw_offset_new_deg - self._yaw_offset_deg)
-                        self._yaw_offset_deg = wrap_deg(self._yaw_offset_deg + self.yaw_update_alpha * delta)
-                    global_heading = math.degrees(odom.yaw) + self._yaw_offset_deg
-                lat_snap, lon_snap = lat_cur, lon_cur
-                odom_snap = odom
-
             dW, dN = latlon_to_west_north_offset_m(lat_cur, lon_cur, goal_node.lat, goal_node.lon)
             dth = math.radians(global_heading)
             dx =  math.cos(dth) * dN + math.sin(dth) * dW
@@ -196,7 +176,7 @@ class GnssRouteProvider:
 
             rec = GnssRouteRecord(
                 t_monotonic=time.monotonic(),
-                heading_calibrated=self._heading_calibrated,
+                heading_calibrated=heading_calibrated,
                 reached_goal=self._reached_goal,
                 dx=dx, dy=dy, vx=vx, vy=0.0, vyaw=vyaw,
             )
@@ -222,23 +202,22 @@ class GnssRouteProvider:
     def _run(self) -> None:
         try:
             self._reached_goal = False
-            if not self._heading_calibrated:
-                self._yaw_offset_deg = 0.0
 
             # 초기 레코드 즉시 발행 (start()의 대기 조건)
             with self._lock:
-                self._data = GnssRouteRecord(
-                    t_monotonic=time.monotonic(),
-                    heading_calibrated=self._heading_calibrated,
-                )
+                self._data = GnssRouteRecord(t_monotonic=time.monotonic())
 
-            # NavigationProvider가 캘리브레이션 완료 후 yaw_offset + tracker를 주입할 때까지 대기
             while self.running:
                 with self._lock:
                     tracker = self._tracker
-                    has_offset = self._heading_calibrated
 
-                if not has_offset or tracker is None or tracker.is_done:
+                if tracker is None or tracker.is_done:
+                    rec = GnssRouteRecord(
+                        t_monotonic=time.monotonic(),
+                        reached_goal=True,
+                    )
+                    with self._lock:
+                        self._data = rec
                     time.sleep(0.05)
                     continue
 
