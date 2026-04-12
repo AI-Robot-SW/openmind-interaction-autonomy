@@ -13,10 +13,6 @@ from fuser import Fuser
 #                 룰 기반으로 검증/차단/보정하는 Post-LLM 가드 레이어.
 #                 See docs/action_hooks.md for full specification.
 from hooks.action_hooks import ActionHookChain
-from hooks.action_hooks.action_count_hook import ActionCountHook
-from hooks.action_hooks.consistency_hook import ConsistencyHook
-from hooks.action_hooks.no_voice_move_hook import NoVoiceMoveHook
-from hooks.action_hooks.repeat_speak_hook import RepeatSpeakHook
 
 from inputs.orchestrator import InputOrchestrator
 from providers.config_provider import ConfigProvider
@@ -83,17 +79,12 @@ class CortexRuntime:
         self.sleep_ticker_provider = SleepTickerProvider()
         self.io_provider = IOProvider()
         self.config_provider = ConfigProvider()
-        # action_hooks : Hook 실행 순서 — 확실한 차단부터, 의미 검증은 마지막.
-        #   1) ActionCountHook   : 비정상 action 수 제한 (max 3)
-        #   2) NoVoiceMoveHook   : Voice 입력 없는 tick에서 move 차단
-        #   3) RepeatSpeakHook   : 직전 tick과 동일한 speak 반복 차단
-        #   4) ConsistencyHook   : speak-move 의미 일관성 경고 (warning only)
-        self.action_hook_chain = ActionHookChain([
-            ActionCountHook(),
-            NoVoiceMoveHook(),
-            RepeatSpeakHook(),
-            ConsistencyHook(),
-        ])
+        # action_hooks : DEFAULT_HOOKS 순서대로 실행 (hooks/action_hooks/__init__.py 참조)
+        #   1) action_count_hook  : 비정상 action 수 제한 (max 3)
+        #   2) no_voice_move_hook : Voice 입력 없는 tick에서 move 차단
+        #   3) repeat_speak_hook  : 직전 tick과 동일한 speak 반복 차단
+        #   4) consistency_hook   : speak-move 의미 일관성 경고 (warning only)
+        self.action_hook_chain = ActionHookChain()
 
         self.last_modified: float = 0.0
         self.config_watcher_task: Optional[asyncio.Task] = None
