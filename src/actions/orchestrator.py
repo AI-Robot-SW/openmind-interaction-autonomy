@@ -131,9 +131,12 @@ class ActionOrchestrator:
         logging.debug(
             f"Calling action {agent_action.llm_label} with type {action.type.lower()} and argument {action.value}"
         )
-        input_interface = T.get_type_hints(agent_action.interface)["input"](
-            **{"action": action.value}
-        )
+        hints = T.get_type_hints(agent_action.interface)
+        input_cls = hints["input"]
+        kwargs: dict = {"action": action.value}
+        if "interrupt" in T.get_type_hints(input_cls):
+            kwargs["interrupt"] = action.interrupt
+        input_interface = input_cls(**kwargs)
         await agent_action.connector.connect(input_interface)
         return input_interface
 
