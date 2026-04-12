@@ -522,14 +522,17 @@ class CortexRuntime:
 
             # action_hooks : LLM 응답 직후, Orchestrator dispatch 직전에
             #                hook chain을 실행하여 actions를 검증/차단/보정한다.
+            # action_hooks : 현재 tick에 Voice 입력이 있는지 판별한다.
+            #   IOProvider.inputs는 Dict[str, Input] — key가 센서 이름(예: "SoundSensor").
+            inputs = self.io_provider.inputs
+            has_voice = any(
+                ("TextSensor" in k or "SoundSensor" in k)
+                and inputs[k] is not None
+                and inputs[k].tick == tick_num
+                for k in inputs
+            )
             hook_context = {
-                "has_voice_input": any(
-                    "TextSensor" in (self.io_provider.inputs.get(k) or "")
-                    or "SoundSensor" in k
-                    for k in self.io_provider.inputs
-                    if self.io_provider.inputs[k]
-                    and self.io_provider.inputs[k].tick == tick_num
-                ),
+                "has_voice_input": has_voice,
                 "tick_number": tick_num,
             }
             output = self.action_hook_chain.validate(output, hook_context)
