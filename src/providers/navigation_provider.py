@@ -182,7 +182,8 @@ class NavigationProvider:
 
     def pause(self) -> None:
         """속도를 0으로 설정합니다. 경로와 내비게이션 스레드는 유지됩니다."""
-        self._speed_before_pause = float(self._dwa.vx_fixed)
+        if self._speed_before_pause is None:
+            self._speed_before_pause = float(self._dwa.vx_fixed)
         self._dwa.vx_fixed = 0.0
         logger.info("NavigationProvider.pause: speed %.2f -> 0.0 m/s", self._speed_before_pause)
 
@@ -372,7 +373,7 @@ class NavigationProvider:
                         # vx_cmd > 0이면 vx_fixed(step_faster/step_slower로 조정 가능)로 override.
                         # vx_cmd == 0은 turn-in-place 신호이므로 그대로 존중.
                         vx = float(self._dwa.vx_fixed) if float(rec.vx_cmd) > 1e-6 else 0.0
-                        vyaw = float(rec.vyaw_cmd)
+                        vyaw = float(rec.vyaw_cmd) if vx > 1e-6 else 0.0
                     else:
                         vx = 0.0
                         vyaw = 0.0
