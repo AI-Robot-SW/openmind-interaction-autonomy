@@ -11,11 +11,6 @@ def wrap_deg(a: float) -> float:
     return (a + 180.0) % 360.0 - 180.0
 
 
-def wrap_rad(a: float) -> float:
-    """Wrap angle (radians) to [-π, π]"""
-    return (a + math.pi) % (2.0 * math.pi) - math.pi
-
-
 def latlon_to_west_north_offset_m(
     lat1_deg: float,
     lon1_deg: float,
