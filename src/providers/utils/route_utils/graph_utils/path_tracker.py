@@ -89,6 +89,11 @@ class PathTracker:
         return self._idx >= len(self._path)
 
     @property
+    def path(self) -> list[NodeRef]:
+        """경로 전체 NodeRef 리스트."""
+        return self._path
+
+    @property
     def progress(self) -> tuple[int, int]:
         """(현재 인덱스, 전체 노드 수) 반환."""
         return self._idx, len(self._path)
