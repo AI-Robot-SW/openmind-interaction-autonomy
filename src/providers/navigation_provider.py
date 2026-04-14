@@ -515,7 +515,7 @@ class NavigationProvider:
                     mode = str(rec.mode)
                     if mode == "DWA":
                         vx = float(self._dwa.vx_fixed) if float(rec.vx_cmd) > 1e-6 else 0.0
-                        vyaw = float(rec.vyaw_cmd)
+                        vyaw = float(rec.vyaw_cmd) if vx > 1e-6 else 0.0
                     else:
                         vx = 0.0
                         vyaw = 0.0
