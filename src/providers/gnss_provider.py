@@ -30,6 +30,15 @@ class UbxPvtRecord:
 
 
 class GnssProvider:
+    @staticmethod
+    def _make_empty_record() -> UbxPvtRecord:
+        return UbxPvtRecord(
+            t_monotonic=time.monotonic(),
+            hour=None, minute=None, second=None,
+            validTime=None, fixType=None, diffSoln=None, carrSoln=None,
+            numSV=None, lon=None, lat=None, hAcc_m=None, pDOP=None,
+        )
+
     def __init__(
         self,
         port: str = "/dev/rtk",
@@ -42,7 +51,7 @@ class GnssProvider:
         self.ser: Optional[serial.Serial] = None
         
         self._write_lock = threading.RLock()
-        self._data: Optional[UbxPvtRecord] = None
+        self._data: UbxPvtRecord = self._make_empty_record()
         self._lock = threading.Lock()
 
         self.running = False
@@ -55,19 +64,14 @@ class GnssProvider:
 
         self.ser = serial.Serial(self._port, self._baud, timeout=1.0)
 
+        with self._lock:
+            self._data = self._make_empty_record()
+
+        self._cfg_interface()
+
         self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True, name="GnssReader")
         self._thread.start()
-        
-        # 첫 레코드 도착까지 대기
-        deadline = time.monotonic() + 10.0
-        while time.monotonic() < deadline:
-            with self._lock:
-                if self._data is not None:
-                    break
-            time.sleep(0.01)
-        else:
-            raise RuntimeError("Gnss(RTK)Provider: timed out waiting for first record")
 
         logging.info("Gnss(RTK)Provider started")
 
@@ -126,13 +130,12 @@ class GnssProvider:
         )
 
     @property
-    def data(self) -> Optional[UbxPvtRecord]:
-        """최신 UbxPvtRecord. 데이터 수신 전에는 None."""
+    def data(self) -> UbxPvtRecord:
+        """최신 UbxPvtRecord. lat/lon 등이 None이면 아직 fix 없음."""
         with self._lock:
             return self._data
         
     def _run(self) -> None:
-        self._cfg_interface()
         ubr = UBXReader(self.ser, protfilter=UBX_PROTOCOL)
 
         while self.running:
