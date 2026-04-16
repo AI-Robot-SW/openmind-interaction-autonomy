@@ -1,8 +1,8 @@
 """
-GUI Background - 음성 볼륨 WebSocket 브로드캐스트 서비스
+GUI Background - 음성/내비게이션 WebSocket 브로드캐스트 서비스
 
-이 모듈은 AudioProvider의 계산된 볼륨 값을 읽어
-WebSocket(`/voice_spectrum`)으로 주기적으로 브로드캐스트합니다.
+이 모듈은 AudioProvider의 계산된 볼륨 값과
+NavigationProvider의 최신 상태를 읽어 WebSocket으로 주기적으로 브로드캐스트합니다.
 """
 
 import asyncio
@@ -10,13 +10,14 @@ import json
 import logging
 import threading
 import time
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import websockets
 from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
 from providers.audio_provider import AudioProvider
+from providers.navigation_provider import NavigationProvider
 
 
 class GUIBgConfig(BackgroundConfig):
@@ -24,7 +25,8 @@ class GUIBgConfig(BackgroundConfig):
 
     host: str = Field(default="0.0.0.0", description="WebSocket host")
     port: int = Field(default=8767, description="WebSocket port")
-    ws_path: str = Field(default="/voice_spectrum", description="WebSocket path")
+    voice_ws_path: str = Field(default="/voice_spectrum", description="WebSocket path for voice spectrum")
+    navi_ws_path: str = Field(default="/navigation", description="WebSocket path for navigation path status")
     broadcast_interval_sec: float = Field(
         default=0.05, description="볼륨 브로드캐스트 주기 (초)"
     )
@@ -35,7 +37,8 @@ class GUIBgConfig(BackgroundConfig):
 
 class GUIBg(Background[GUIBgConfig]):
     """
-    AudioProvider의 볼륨 값을 WebSocket으로 브로드캐스트하는 background.
+    AudioProvider의 볼륨 값과 NavigationProvider의 최신 상태를
+    WebSocket으로 브로드캐스트하는 background.
     """
 
     def __init__(self, config: GUIBgConfig):
@@ -46,8 +49,23 @@ class GUIBg(Background[GUIBgConfig]):
             logging.warning(
                 "AudioProvider is not running. Start AudioBg first for live volume updates."
             )
-
+        self.navigation_provider = NavigationProvider()
+        if not self.navigation_provider.running:
+            logging.warning(
+                "NavigationProvider is not running. Start NavigationBg first for live navigation updates."
+            )
         self._audio_connections = set()
+        self._navi_connections = set()
+        self._channels: dict[str, dict[str, Any]] = {
+            self.config.voice_ws_path: {
+                "connections": self._audio_connections,
+                "builder": self._build_audio_payload,
+            },
+            self.config.navi_ws_path: {
+                "connections": self._navi_connections,
+                "builder": self._build_navigation_payload,
+            },
+        }
         self._server = None
         self._server_loop: Optional[asyncio.AbstractEventLoop] = None
         self._server_thread: Optional[threading.Thread] = None
@@ -57,10 +75,10 @@ class GUIBg(Background[GUIBgConfig]):
 
         self._start_server_thread()
         logging.info(
-            "GUIBg initialized: ws://%s:%s%s",
+            "GUIBg initialized: ws://%s:%s (%s)",
             self.config.host,
             self.config.port,
-            self.config.ws_path,
+            ", ".join(sorted(self._channels.keys())),
         )
 
     # ---- WebSocket server ----
@@ -111,11 +129,23 @@ class GUIBg(Background[GUIBgConfig]):
             self.config.port,
         )
         logging.info(
-            "GUIBg WebSocket server started: ws://%s:%s%s",
+            "GUIBg WebSocket server started: ws://%s:%s (%s)",
             self.config.host,
             self.config.port,
-            self.config.ws_path,
+            ", ".join(sorted(self._channels.keys())),
         )
+
+    def _get_channel(self, path: Optional[str]) -> Optional[dict[str, Any]]:
+        if path is None:
+            return None
+        return self._channels.get(path)
+
+    @staticmethod
+    async def _send_payload(
+        websocket,
+        builder: Callable[[], Any],
+    ) -> None:
+        await websocket.send(json.dumps(builder()))
 
     async def _handle_client(self, websocket) -> None:
         path = getattr(websocket, "path", None)
@@ -123,17 +153,19 @@ class GUIBg(Background[GUIBgConfig]):
             request = getattr(websocket, "request", None)
             path = getattr(request, "path", None)
 
-        if path != self.config.ws_path:
+        channel = self._get_channel(path)
+        if channel is None:
             await websocket.close(
                 code=1008,
-                reason=f"Use {self.config.ws_path}",
+                reason=f"Use one of: {', '.join(sorted(self._channels.keys()))}",
             )
             return
 
-        self._audio_connections.add(websocket)
+        connections = channel["connections"]
+        builder = channel["builder"]
+        connections.add(websocket)
         try:
-            payload = self._build_audio_payload()
-            await websocket.send(json.dumps(payload))
+            await self._send_payload(websocket, builder)
             async for _ in websocket:
                 # Client messages are ignored; server is push-only.
                 pass
@@ -142,33 +174,38 @@ class GUIBg(Background[GUIBgConfig]):
         except Exception as e:
             logging.error("GUIBg client handler error: %s", e)
         finally:
-            self._audio_connections.discard(websocket)
+            connections.discard(websocket)
 
     async def _broadcast_loop(self) -> None:
         interval = max(0.01, float(self.config.broadcast_interval_sec))
         try:
             while not self._shutdown_event.is_set():
-                if self._audio_connections:
-                    payload = json.dumps(self._build_audio_payload())
+                for channel in self._channels.values():
+                    connections = channel["connections"]
+                    if not connections:
+                        continue
+                    payload = json.dumps(channel["builder"]())
                     stale = []
-                    for conn in list(self._audio_connections):
+                    for conn in list(connections):
                         try:
                             await conn.send(payload)
                         except Exception:
                             stale.append(conn)
                     for conn in stale:
-                        self._audio_connections.discard(conn)
+                        connections.discard(conn)
                 await asyncio.sleep(interval)
         except asyncio.CancelledError:
             return
 
     async def _cleanup_server(self) -> None:
-        for conn in list(self._audio_connections):
-            try:
-                await conn.close()
-            except Exception:
-                pass
-        self._audio_connections.clear()
+        for channel in self._channels.values():
+            connections = channel["connections"]
+            for conn in list(connections):
+                try:
+                    await conn.close()
+                except Exception:
+                    pass
+            connections.clear()
 
         if self._server is not None:
             self._server.close()
@@ -177,6 +214,12 @@ class GUIBg(Background[GUIBgConfig]):
 
     def _build_audio_payload(self) -> float:
         return float(self.audio_provider.get_audio_level())
+
+    def _build_navigation_payload(self) -> dict[str, Any]:
+        data = self.navigation_provider.data
+        if data is None:
+            return {}
+        return dict(data)
 
     # ---- Lifecycle ----
 
