@@ -18,6 +18,7 @@ from pydantic import Field
 from backgrounds.base import Background, BackgroundConfig
 from providers.audio_provider import AudioProvider
 from providers.navigation_provider import NavigationProvider
+from providers.tts_provider import TTSProvider
 
 
 class GUIBgConfig(BackgroundConfig):
@@ -27,6 +28,7 @@ class GUIBgConfig(BackgroundConfig):
     port: int = Field(default=8767, description="WebSocket port")
     voice_ws_path: str = Field(default="/voice_spectrum", description="WebSocket path for voice spectrum")
     navi_ws_path: str = Field(default="/navigation", description="WebSocket path for navigation path status")
+    tts_ws_path: str = Field(default="/tts_text", description="WebSocket path for TTS text")
     broadcast_interval_sec: float = Field(
         default=0.05, description="볼륨 브로드캐스트 주기 (초)"
     )
@@ -46,6 +48,7 @@ class GUIBg(Background[GUIBgConfig]):
 
         self._audio_connections = set()
         self._navi_connections = set()
+        self._tts_connections = set()
         self._channels: dict[str, dict[str, Any]] = {
             self.config.voice_ws_path: {
                 "connections": self._audio_connections,
@@ -54,6 +57,10 @@ class GUIBg(Background[GUIBgConfig]):
             self.config.navi_ws_path: {
                 "connections": self._navi_connections,
                 "builder": self._build_navigation_payload,
+            },
+            self.config.tts_ws_path: {
+                "connections": self._tts_connections,
+                "builder": self._build_tts_payload,
             },
         }
         self._server = None
@@ -64,6 +71,7 @@ class GUIBg(Background[GUIBgConfig]):
         self._last_health_check = time.time()
         self._audio_missing_warned = False
         self._navigation_missing_warned = False
+        self._tts_missing_warned = False
 
         self._start_server_thread()
         logging.info(
@@ -232,7 +240,18 @@ class GUIBg(Background[GUIBgConfig]):
                 self._navigation_missing_warned = True
             return None
         return provider
-
+    
+    def _get_tts_provider(self) -> Any:
+        provider = self._get_singleton_instance(TTSProvider)
+        if provider is None:
+            if not self._tts_missing_warned:
+                logging.warning(
+                    "GUIBg: TTSProvider not initialized yet. Start TTSBg first for live TTS updates."
+                )
+                self._tts_missing_warned = True
+            return None
+        return provider
+    
     def _build_audio_payload(self) -> float:
         provider = self._get_audio_provider()
         if provider is None or not provider.running:
@@ -247,6 +266,12 @@ class GUIBg(Background[GUIBgConfig]):
         if data is None:
             return {}
         return dict(data)
+    
+    def _build_tts_payload(self) -> dict[str, Any]:
+        provider = self._get_tts_provider()
+        if provider is None or not provider.running:
+            return {"text": ""}
+        return {"text": provider.get_tts_text()}
 
     # ---- Lifecycle ----
 
