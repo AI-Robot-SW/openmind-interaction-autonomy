@@ -44,16 +44,6 @@ class GUIBg(Background[GUIBgConfig]):
     def __init__(self, config: GUIBgConfig):
         super().__init__(config)
 
-        self.audio_provider = AudioProvider()
-        if not self.audio_provider.running:
-            logging.warning(
-                "AudioProvider is not running. Start AudioBg first for live volume updates."
-            )
-        self.navigation_provider = NavigationProvider()
-        if not self.navigation_provider.running:
-            logging.warning(
-                "NavigationProvider is not running. Start NavigationBg first for live navigation updates."
-            )
         self._audio_connections = set()
         self._navi_connections = set()
         self._channels: dict[str, dict[str, Any]] = {
@@ -72,6 +62,8 @@ class GUIBg(Background[GUIBgConfig]):
         self._broadcast_task: Optional[asyncio.Task] = None
         self._shutdown_event = threading.Event()
         self._last_health_check = time.time()
+        self._audio_missing_warned = False
+        self._navigation_missing_warned = False
 
         self._start_server_thread()
         logging.info(
@@ -212,11 +204,46 @@ class GUIBg(Background[GUIBgConfig]):
             await self._server.wait_closed()
             self._server = None
 
+    @staticmethod
+    def _get_singleton_instance(factory: Any) -> Any:
+        singleton_cls = getattr(factory, "_singleton_class", None)
+        if singleton_cls is None:
+            return None
+        return getattr(singleton_cls, "_singleton_instance", None)
+
+    def _get_audio_provider(self) -> Any:
+        provider = self._get_singleton_instance(AudioProvider)
+        if provider is None:
+            if not self._audio_missing_warned:
+                logging.warning(
+                    "GUIBg: AudioProvider not initialized yet. Start AudioBg first for live volume updates."
+                )
+                self._audio_missing_warned = True
+            return None
+        return provider
+
+    def _get_navigation_provider(self) -> Any:
+        provider = self._get_singleton_instance(NavigationProvider)
+        if provider is None:
+            if not self._navigation_missing_warned:
+                logging.warning(
+                    "GUIBg: NavigationProvider not initialized yet. Start NavigationBg first for live navigation updates."
+                )
+                self._navigation_missing_warned = True
+            return None
+        return provider
+
     def _build_audio_payload(self) -> float:
-        return float(self.audio_provider.get_audio_level())
+        provider = self._get_audio_provider()
+        if provider is None or not provider.running:
+            return 0.0
+        return float(provider.get_audio_level())
 
     def _build_navigation_payload(self) -> dict[str, Any]:
-        data = self.navigation_provider.data
+        provider = self._get_navigation_provider()
+        if provider is None or not provider.running:
+            return {}
+        data = provider.data
         if data is None:
             return {}
         return dict(data)
