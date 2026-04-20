@@ -8,6 +8,12 @@ import json5
 from actions.orchestrator import ActionOrchestrator
 from backgrounds.orchestrator import BackgroundOrchestrator
 from fuser import Fuser
+
+# action_hooks : LLM 출력(actions)을 Action Orchestrator에 전달하기 전에
+#                 룰 기반으로 검증/차단/보정하는 Post-LLM 가드 레이어.
+#                 See docs/action_hooks.md for full specification.
+from hooks.action_hooks import ActionHookChain
+
 from inputs.orchestrator import InputOrchestrator
 from providers.config_provider import ConfigProvider
 from providers.io_provider import IOProvider
@@ -73,6 +79,12 @@ class CortexRuntime:
         self.sleep_ticker_provider = SleepTickerProvider()
         self.io_provider = IOProvider()
         self.config_provider = ConfigProvider()
+        # action_hooks : DEFAULT_HOOKS 순서대로 실행 (hooks/action_hooks/__init__.py 참조)
+        #   1) action_count_hook  : 비정상 action 수 제한 (max 3)
+        #   2) no_voice_move_hook : Voice 입력 없는 tick에서 move 차단
+        #   3) repeat_speak_hook  : 직전 tick과 동일한 speak 반복 차단
+        #   4) consistency_hook   : speak-move 의미 일관성 경고 (warning only)
+        self.action_hook_chain = ActionHookChain()
 
         self.last_modified: float = 0.0
         self.config_watcher_task: Optional[asyncio.Task] = None
@@ -507,6 +519,23 @@ class CortexRuntime:
             if output is None:
                 logging.debug("No output from LLM")
                 return
+
+            # action_hooks : LLM 응답 직후, Orchestrator dispatch 직전에
+            #                hook chain을 실행하여 actions를 검증/차단/보정한다.
+            # action_hooks : 현재 tick에 Voice 입력이 있는지 판별한다.
+            #   IOProvider.inputs는 Dict[str, Input] — key가 센서 이름(예: "SoundSensor").
+            inputs = self.io_provider.inputs
+            has_voice = any(
+                ("TextSensor" in k or "SoundSensor" in k)
+                and inputs[k] is not None
+                and inputs[k].tick == tick_num
+                for k in inputs
+            )
+            hook_context = {
+                "has_voice_input": has_voice,
+                "tick_number": tick_num,
+            }
+            output = self.action_hook_chain.validate(output, hook_context)
 
             # Trigger the simulators
             await self.simulator_orchestrator.promise(output.actions)
