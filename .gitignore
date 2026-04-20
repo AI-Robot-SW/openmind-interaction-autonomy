@@ -45,3 +45,4 @@ logs/
 config/memory
 config/.runtime.json5
 .claude
+.codex
