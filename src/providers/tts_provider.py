@@ -284,7 +284,7 @@ class TTSProvider:
 
         # text 변수 
         self._current_text: str = ""
-
+        self._is_speaking = False
         # TODO: AudioOutputStream 초기화
         # self._audio_stream: AudioOutputStream = AudioOutputStream(
         #     url=url,
@@ -680,7 +680,9 @@ class TTSProvider:
                 text = request.get("text", "")
                 text_preview = text[:30]
                 with self._lock:
+                    self._is_speaking = True
                     self._current_text = text
+                    
                 logging.debug(f"Processing TTS: {text_preview}...")
 
                 # TTS 합성
@@ -713,7 +715,7 @@ class TTSProvider:
                 # 완료
                 self._set_state(TTSState.IDLE)
                 with self._lock:
-                    self._current_text = "" 
+                    self._is_speaking = False
                 self._pending_requests.task_done()
                 
 
