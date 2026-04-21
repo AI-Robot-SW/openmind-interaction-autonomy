@@ -54,8 +54,8 @@ class RtkProvider(GnssProvider):
         caster: str = "rts2.ngii.go.kr",
         ntrip_port: int = 2101,
         mountpoint: str = "VRS-RTCM32",
-        user: str = "",
-        password: str = "",
+        user: str = "dori0126",
+        password: str = "ngii",
     ) -> None:
         super().__init__(port=port, baud=baud, measRate_ms=measRate_ms)
 
