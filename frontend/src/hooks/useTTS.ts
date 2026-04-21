@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useTTSStore } from "../stores/ttsStore";
+import type { TTSStateValue } from "../stores/ttsStore";
 import { getWsBase } from "../wire/getWsBase";
 import { createWebSocketClient } from "../wire/websocket";
 
 type TTSMessage = {
   text?: string;
+  // Preferred key (matches current GUI_bg.py)
+  state?: TTSStateValue;
+  // Compatibility keys (in case an older server uses different naming)
+  tts_state?: TTSStateValue;
+  ttsState?: TTSStateValue;
+  // Optional playback info (GUI_bg.py may include this)
+  speaker_playing?: boolean;
+  speakerPlaying?: boolean;
 };
 
 export function useTTS() {
-  const setDisplayText = useTTSStore((state) => state.setDisplayText);
-  const clearDisplayText = useTTSStore((state) => state.clearDisplayText);
-  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const setTTSState = useTTSStore((state) => state.setTTSState);
+  const warnedMissingStateRef = useRef(false);
 
   const wsUrl = useMemo(() => {
     return `${getWsBase()}/tts_text`;
@@ -21,22 +29,25 @@ export function useTTS() {
       wsUrl,
       {
         onMessage: (msg) => {
-          const text = msg.text?.trim() ?? "";
-
-          if (clearTimerRef.current) {
-            clearTimeout(clearTimerRef.current);
-            clearTimerRef.current = null;
+          const nextState = msg.state ?? msg.tts_state ?? msg.ttsState;
+          const speakerPlaying = msg.speaker_playing ?? msg.speakerPlaying;
+          if (import.meta.env.DEV && nextState == null && !warnedMissingStateRef.current) {
+            warnedMissingStateRef.current = true;
+            console.warn("[useTTS] Missing `state` in WS message; defaulting to `idle`.", msg);
           }
-
-          if (text) {
-            setDisplayText(text);
-            return;
-          }
-
-          clearTimerRef.current = setTimeout(() => {
-            clearDisplayText();
-            clearTimerRef.current = null;
-          }, 3000);
+          setTTSState({
+            displayText: msg.text?.trim() ?? "",
+            state: nextState ?? "idle",
+            speakerPlaying: Boolean(speakerPlaying),
+          });
+        },
+        onStatus: (s) => {
+          if (!import.meta.env.DEV) return;
+          console.log("[useTTS] ws status", { url: wsUrl, status: s });
+        },
+        onError: (e) => {
+          if (!import.meta.env.DEV) return;
+          console.warn("[useTTS] ws error", { url: wsUrl, event: e });
         },
       },
       (raw) => JSON.parse(raw) as TTSMessage,
@@ -45,11 +56,7 @@ export function useTTS() {
     client.connect();
 
     return () => {
-      if (clearTimerRef.current) {
-        clearTimeout(clearTimerRef.current);
-        clearTimerRef.current = null;
-      }
       client.disconnect();
     };
-  }, [clearDisplayText, setDisplayText, wsUrl]);
+  }, [setTTSState, wsUrl]);
 }
