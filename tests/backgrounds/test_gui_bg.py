@@ -37,7 +37,7 @@ def test_gui_bg_returns_safe_defaults_without_providers():
     with patch.object(GUIBg, "_start_server_thread", return_value=None):
         bg = GUIBg(config)
 
-    assert bg._build_audio_payload() == 0.0
+    assert bg._build_audio_payload() == {"level": 0.0, "voice_active": False}
     assert bg._build_navigation_payload() == {}
 
 
@@ -48,6 +48,10 @@ def test_gui_bg_uses_existing_provider_instances():
         @staticmethod
         def get_audio_level():
             return 0.42
+
+        @staticmethod
+        def is_voice_active():
+            return True
 
     class FakeNavigationProvider:
         running = True
@@ -61,5 +65,5 @@ def test_gui_bg_uses_existing_provider_instances():
     bg._get_audio_provider = lambda: FakeAudioProvider()  # type: ignore[method-assign]
     bg._get_navigation_provider = lambda: FakeNavigationProvider()  # type: ignore[method-assign]
 
-    assert bg._build_audio_payload() == 0.42
+    assert bg._build_audio_payload() == {"level": 0.42, "voice_active": True}
     assert bg._build_navigation_payload() == {"mode": "DWA", "vx": 0.8}

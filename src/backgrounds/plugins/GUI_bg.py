@@ -17,8 +17,17 @@ from pydantic import Field
 
 from backgrounds.base import Background, BackgroundConfig
 from providers.audio_provider import AudioProvider
-from providers.navigation_provider import NavigationProvider
+from providers.speaker_provider import SpeakerProvider
 from providers.tts_provider import TTSProvider
+
+# Navigation stack pulls in optional GPU deps (e.g. pycuda). GUIBg should still be able to run
+# for voice/tts even when navigation deps are unavailable.
+_NAV_IMPORT_ERROR: Optional[BaseException] = None
+try:
+    from providers.navigation_provider import NavigationProvider
+except Exception as exc:  # pragma: no cover
+    NavigationProvider = None  # type: ignore
+    _NAV_IMPORT_ERROR = exc
 
 
 class GUIBgConfig(BackgroundConfig):
@@ -231,6 +240,15 @@ class GUIBg(Background[GUIBgConfig]):
         return provider
 
     def _get_navigation_provider(self) -> Any:
+        if NavigationProvider is None:
+            if not self._navigation_missing_warned:
+                logging.warning(
+                    "GUIBg: NavigationProvider import failed (optional dependency missing). "
+                    "Navigation channel will be empty. Error: %s",
+                    _NAV_IMPORT_ERROR,
+                )
+                self._navigation_missing_warned = True
+            return None
         provider = self._get_singleton_instance(NavigationProvider)
         if provider is None:
             if not self._navigation_missing_warned:
@@ -251,12 +269,21 @@ class GUIBg(Background[GUIBgConfig]):
                 self._tts_missing_warned = True
             return None
         return provider
+
+    def _get_speaker_provider(self) -> Any:
+        provider = self._get_singleton_instance(SpeakerProvider)
+        if provider is None:
+            return None
+        return provider
     
-    def _build_audio_payload(self) -> float:
+    def _build_audio_payload(self) -> dict[str, Any]:
         provider = self._get_audio_provider()
         if provider is None or not provider.running:
-            return 0.0
-        return float(provider.get_audio_level())
+            return {"level": 0.0, "voice_active": False}
+        return {
+            "level": float(provider.get_audio_level()),
+            "voice_active": bool(provider.is_voice_active()),
+        }
 
     def _build_navigation_payload(self) -> dict[str, Any]:
         provider = self._get_navigation_provider()
@@ -270,8 +297,14 @@ class GUIBg(Background[GUIBgConfig]):
     def _build_tts_payload(self) -> dict[str, Any]:
         provider = self._get_tts_provider()
         if provider is None or not provider.running:
-            return {"text": ""}
-        return {"text": provider.get_tts_text()}
+            return {"text": "", "state": "idle"}
+        speaker = self._get_speaker_provider()
+        return {
+            "text": provider.get_tts_text(),
+            "state": provider.get_current_state().value,
+            # Helps the frontend reflect "speaking" during actual audio playback.
+            "speaker_playing": bool(speaker.is_playing()) if speaker is not None else False,
+        }
 
     # ---- Lifecycle ----
 

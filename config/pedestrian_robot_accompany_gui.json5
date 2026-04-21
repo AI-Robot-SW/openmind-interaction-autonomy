@@ -70,8 +70,8 @@
   "backgrounds": [
     { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 }},
     { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" }},
-    { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": false } },
-    { "type": "STTBg", "config": { "sample_rate": 44100 } },
+    { "type": "AudioBg", "config": { "sample_rate": 16000,"chunk_size":512, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true, "vad_threshold":0.5 } },
+    { "type": "STTBg", "config": { "sample_rate": 16000 } },
     { "type": "GUIBg", "config": { "host": "0.0.0.0", "port": 8767, "ws_path": "/voice_spectrum", "subtitle_ws_path": "/subtitles" } }
   ],
 
