@@ -12,7 +12,7 @@ def wrap_deg(a: float) -> float:
 
 
 def wrap_rad(a: float) -> float:
-    """Wrap angle (radians) to [-π, π]"""
+    """Wrap angle (radians) to [-pi, pi]"""
     return (a + math.pi) % (2.0 * math.pi) - math.pi
 
 
@@ -35,7 +35,7 @@ def latlon_to_west_north_offset_m(
 
 
 def haversine_dist_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """두 WGS84 좌표 간 거리(미터)를 Haversine 공식으로 계산한다."""
+    """두 WGS84 좌표 간 거리(미터)를 계산한다."""
     phi1, phi2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlam = math.radians(lon2 - lon1)
@@ -43,6 +43,6 @@ def haversine_dist_m(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
     return EARTH_R * 2 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
 
-def euclidean_dist(x1: float, y1: float, x2: float, y2: float) -> float:
-    """두 2D 좌표 간 유클리드 거리(미터)를 계산한다."""
+def euclidean_dist_m(x1: float, y1: float, x2: float, y2: float) -> float:
+    """두 평면 좌표 간 거리(미터)를 계산한다."""
     return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)

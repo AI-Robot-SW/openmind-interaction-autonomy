@@ -8,7 +8,7 @@ from typing import Optional
 from .graph_loader import GraphLoader
 from .graph_model import Graph, Node, NodeRef
 
-from ...geo_utils import haversine_dist_m, euclidean_dist
+from ...geo_utils import haversine_dist_m, euclidean_dist_m
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class PathTracker:
             else:
                 if x is None or y is None or node.x is None or node.y is None:
                     break
-                dist = euclidean_dist(x, y, node.x, node.y)
+                dist = euclidean_dist_m(x, y, node.x, node.y)
 
             if dist < reach_tol:
                 logging.info(

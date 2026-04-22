@@ -8,7 +8,7 @@ from typing import Optional
 from .graph_loader import GraphLoader
 from .graph_model import Graph, Node, NodeRef
 
-from ...geo_utils import euclidean_dist, haversine_dist_m
+from ...geo_utils import euclidean_dist_m, haversine_dist_m
 
 # 그래프 경계 횡단 비용 (meters 단위 거리와 동일한 스케일)
 # 실내/실외 전환, 계단 등에 부여할 패널티를 타입별로 정의
@@ -29,7 +29,7 @@ def _edge_weight(graph: Graph, a: Node, b: Node) -> float:
     else:
         assert a.x is not None and a.y is not None
         assert b.x is not None and b.y is not None
-        return euclidean_dist(a.x, a.y, b.x, b.y)
+        return euclidean_dist_m(a.x, a.y, b.x, b.y)
 
 
 def _build_transition_index(
@@ -146,7 +146,7 @@ class PathFinder:
         graph = self._loader.get_graph(graph_id)
         best = min(
             graph.nodes.values(),
-            key=lambda n: euclidean_dist(x, y, n.x, n.y),
+            key=lambda n: euclidean_dist_m(x, y, n.x, n.y),
         )
         return (graph_id, best.id)
 
