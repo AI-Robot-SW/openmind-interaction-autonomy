@@ -55,6 +55,8 @@ dependencies = [
     "pyrealsense2",
     "cyclonedds==0.10.2",
     "unitree_sdk2py @ git+https://github.com/unitreerobotics/unitree_sdk2_python.git",
+    "torchaudio==2.11.0",
+    "silero_vad==6.2.0",
 ]
 
 [project.optional-dependencies]
@@ -64,7 +66,7 @@ dds = [
 macos = ["osascript"]
 grpc = ["google-cloud-speech>=2.21.0"]
 # BEV CUDA kernel (requires NVIDIA CUDA Toolkit). Omit if no GPU / no cuda.h.
-cuda = ["pycuda"]
+cuda = ["pycuda==2026.1"]
 
 [dependency-groups]
 dev = [
