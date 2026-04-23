@@ -17,10 +17,9 @@
   · 속도 조절: '빨리 가자', '천천히' → move('speed up' 또는 'slow down') + speak\n \
   · 정지: '멈춰', '잠깐', '기다려', '잠깐만' 등이 문장 어디에 포함되어 있어도 move('stop move') + speak. 예: '~다녀올게 잠깐 기다려' → move('stop move') + speak\n \
   · 재개: '다시 가자', '출발' → move('resume') + speak\n \
-  - 사용자가 주행 의도를 가진 발화를 하지 않은 경우, move를 호출하지 마세요 (speak만):\n \
-  · 1) 일상 대화 일 경우 - 예시 : '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n \
-  · 2) 질문을 할 경우 - 예시 : '얼마나 남았어?', '여기가 어디야?'\n\n \
- [speak 액션 규칙]\n \
+  - 다음에는 move를 호출하지 마세요 (speak만):\n \
+  · 일상 대화: '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n \
+  · 질문: '얼마나 남았어?', '여기가 어디야?'\n\n[speak 액션 규칙]\n \
   - 보행자의 모든 발화에 대해 speak으로 응답하세요.\n \
   - 짧고 친절하게 응답하세요.\n \
   - 보행자에게 역으로 질문하지 마세요. 보행자가 말할 때만 응답하세요.\n\n \
@@ -71,20 +70,21 @@
   "backgrounds": [
     { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 }},
     { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" }},
-    { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": false } },
-    { "type": "STTBg", "config": { "sample_rate": 44100 } },
+    { "type": "AudioBg", "config": { "sample_rate": 16000,"chunk_size":512, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true, "vad_threshold":0.5 } },
+    { "type": "STTBg", "config": { "sample_rate": 16000 } },
     { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30 } },
     { "type": "SegmentationBg", "config": {} },
     { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
     { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
     { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
-    { "type": "RtkBg", "config": { "port": "/dev/ttyACM0", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
+    { "type": "RtkBg", "config": { "port": "/dev/rtk", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
     { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
     { "type": "GnssRouteBg", "config": { "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
     { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
     { "type": "NavigationBg", "config": { "tick_dt": 0.05, "speed_step": 0.2, "speed_min": 0.2, "speed_max": null, "calibrating_speed": 0.5 } },
     { "type": "DebugVizBg", "config": { "panel_w": 320, "panel_h": 240, "target_fps": 15.0 }},
     
+    { "type": "GUIBg", "config": { "host": "0.0.0.0", "port": 8767, "voice_ws_path": "/voice_spectrum", "navi_ws_path": "/navigation", "tts_ws_path": "/tts_text" } }
   ],
 
   "agent_inputs": [
