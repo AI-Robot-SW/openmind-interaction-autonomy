@@ -28,6 +28,7 @@ class NavigationState:
     mode: str = "IDLE"
     heading_calibrated: bool = False
     reached_goal: bool = False
+    active_goal: Optional[str] = None
 
 
 # ==============================================================================
@@ -262,6 +263,7 @@ class NavigationProvider:
             "mode": st.mode,
             "heading_calibrated": st.heading_calibrated,
             "reached_goal": st.reached_goal,
+            "active_goal": st.active_goal,
         }
 
     # ---------------- worker ----------------
@@ -287,12 +289,14 @@ class NavigationProvider:
                     carr,
                 )
             return NavigationState(t_monotonic=time.monotonic(), mode="CALIBRATING",
-                                   heading_calibrated=False)
+                                   heading_calibrated=False,
+                                   active_goal=self._active_goal)
 
         odom = self._unitree.get_odometry()
         if odom is None:
             return NavigationState(t_monotonic=time.monotonic(), mode="CALIBRATING",
-                                   heading_calibrated=False)
+                                   heading_calibrated=False,
+                                   active_goal=self._active_goal)
 
         # 첫 tick에서 기준점 초기화
         if self._calib_odom_init is None:
@@ -340,6 +344,7 @@ class NavigationProvider:
             vx=self._calibrating_speed,
             vyaw=vyaw,
             heading_calibrated=self._heading_calibrated,
+            active_goal=self._active_goal,
         )
 
     def _run(self) -> None:
@@ -366,6 +371,7 @@ class NavigationProvider:
                         mode="IDLE",
                         heading_calibrated=self._heading_calibrated,
                         reached_goal=reached_goal,
+                        active_goal=self._active_goal,
                     )
                 else:
                     mode = str(rec.mode)
@@ -385,6 +391,7 @@ class NavigationProvider:
                         mode=mode,
                         heading_calibrated=self._heading_calibrated,
                         reached_goal=reached_goal,
+                        active_goal=self._active_goal,
                     )
                 with self._state_lock:
                     self._latest_state = st
@@ -392,4 +399,3 @@ class NavigationProvider:
                 logger.exception("Error in NavigationProvider worker loop")
 
             self._stop_evt.wait(self._tick_dt)
-

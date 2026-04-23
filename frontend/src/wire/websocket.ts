@@ -4,6 +4,7 @@ type Handlers<T> = {
   onMessage: (msg: T) => void
   onStatus?: (s: WsStatus) => void
   onError?: (e: Event) => void
+  onClose?: (e: CloseEvent) => void
 }
 
 export function createWebSocketClient<T = string>(
@@ -29,7 +30,10 @@ export function createWebSocketClient<T = string>(
       setStatus('error')
       handlers.onError?.(event)
     }
-    ws.onclose = () => setStatus('closed')
+    ws.onclose = (event) => {
+      setStatus('closed')
+      handlers.onClose?.(event)
+    }
   }
 
   const disconnect = () => ws?.close()

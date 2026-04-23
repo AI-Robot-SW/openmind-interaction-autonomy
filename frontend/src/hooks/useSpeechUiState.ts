@@ -15,13 +15,11 @@ export type SpeechUiState = {
   isThinking: boolean;
 };
 
-// UI-facing "effective" speech state derived from raw WS telemetry.
 export function useSpeechUiState(): SpeechUiState {
   const ttsPipelineState = useTTSStore((s) => s.state);
   const speakerPlaying = useTTSStore((s) => s.speakerPlaying);
   const voiceActive = useAudioStore((s) => s.voiceActive);
 
-  // Latch "thinking" when hearing ends, so we can cover the STT/LLM gap before TTS begins.
   const prevVoiceActiveRef = useRef(voiceActive);
   const [thinkingLatched, setThinkingLatched] = useState(false);
 
