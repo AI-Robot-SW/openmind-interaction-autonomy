@@ -43,6 +43,36 @@ def haversine_dist_m(lat1: float, lon1: float, lat2: float, lon2: float) -> floa
     return EARTH_R * 2 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
 
 
+def latlon_to_enu(
+    lat: float, lon: float, origin_lat: float, origin_lon: float
+) -> Tuple[float, float]:
+    """
+    WGS84 lat/lon → 로컬 ENU (x=East, y=North) (m).
+
+    Flat-earth 근사. 원점으로부터 ~10 km 이내에서 유효.
+    """
+    dlat_rad = math.radians(lat - origin_lat)
+    dlon_rad = math.radians(lon - origin_lon)
+    x_m = EARTH_R * math.cos(math.radians(origin_lat)) * dlon_rad
+    y_m = EARTH_R * dlat_rad
+    return x_m, y_m
+
+
+def enu_to_latlon(
+    x_m: float, y_m: float, origin_lat: float, origin_lon: float
+) -> Tuple[float, float]:
+    """
+    로컬 ENU (x=East, y=North) (m) → WGS84 lat/lon.
+
+    latlon_to_enu 의 역변환.
+    """
+    lat = origin_lat + math.degrees(y_m / EARTH_R)
+    lon = origin_lon + math.degrees(
+        x_m / (EARTH_R * math.cos(math.radians(origin_lat)))
+    )
+    return lat, lon
+
+
 def euclidean_dist_m(x1: float, y1: float, x2: float, y2: float) -> float:
     """두 평면 좌표 간 거리(미터)를 계산한다."""
     return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
