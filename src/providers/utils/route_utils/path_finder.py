@@ -71,7 +71,7 @@ class PathFinder:
     """
 
     def __init__(self) -> None:
-        manifest_path = os.path.join(os.path.dirname(__file__), "..", "graphs", "manifest.json")
+        manifest_path = os.path.join(os.path.dirname(__file__), "graphs", "manifest.json")
         self._loader = GraphLoader(manifest_path, max_cache_size=5)
         self._conn_index = _build_transition_index(self._loader)
 
