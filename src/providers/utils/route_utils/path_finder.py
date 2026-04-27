@@ -8,7 +8,7 @@ from typing import Optional
 from .graph_loader import GraphLoader
 from .graph_model import Graph, Node, NodeRef
 
-from ...geo_utils import euclidean_dist_m, haversine_dist_m
+from ..geo_utils import euclidean_dist_m, haversine_dist_m
 
 # 그래프 경계 횡단 비용 (meters 단위 거리와 동일한 스케일)
 # 실내/실외 전환, 계단 등에 부여할 패널티를 타입별로 정의
