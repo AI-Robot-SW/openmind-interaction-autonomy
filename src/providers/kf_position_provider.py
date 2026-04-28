@@ -39,7 +39,6 @@ from .rtk_provider import RtkProvider
 from .utils.kf_utils import UwbOdomAEKF, UwbOdomResidual
 from .utils.kf_utils.rtk_odom_aekf import RtkOdomAEKF
 
-logger = logging.getLogger(__name__)
 
 _TICK_SEC = 0.05  # 20 Hz
 
@@ -144,22 +143,22 @@ class KfPositionProvider:
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
+            logging.warning("KfPositionProvider already running")
             return
+        
         self.running = True
         self._thread = threading.Thread(
             target=self._run, daemon=True, name="KfPositionProviderWorker"
         )
         self._thread.start()
-        logger.info("KfPositionProvider started")
+        logging.info("KfPositionProvider started")
 
     def stop(self) -> None:
         self.running = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2.0)
-            if self._thread.is_alive():
-                logger.warning("KfPositionProvider worker thread did not stop within timeout")
         self._thread = None
-        logger.info("KfPositionProvider stopped")
+        logging.info("KfPositionProvider stopped")
 
     # ------------------------------------------------------------------
     # Data API
@@ -240,7 +239,7 @@ class KfPositionProvider:
                     odom_yaw = odom.yaw if odom is not None else 0.0
                     self._uwb_ekf.initialize(x_m, y_m, odom_yaw)
                     self._uwb_good_cnt = 0
-                    logger.info("UWB EKF initialized at (%.3f, %.3f)", x_m, y_m)
+                    logging.info("UWB EKF initialized at (%.3f, %.3f)", x_m, y_m)
             else:
                 self._uwb_good_cnt = 0
                 self._uwb_bad_cnt = 0
@@ -251,7 +250,7 @@ class KfPositionProvider:
                 if self._uwb_bad_cnt >= _UWB_CONSEC_RESET:
                     self._uwb_ekf.reset()
                     self._uwb_bad_cnt = 0
-                    logger.info(
+                    logging.info(
                         "UWB EKF reset — residual std=%.3fm exceeded threshold for %d consecutive fixes",
                         self._uwb_residual.std_m, _UWB_CONSEC_RESET,
                     )
@@ -278,7 +277,7 @@ class KfPositionProvider:
                 if self._rtk_good_cnt >= _HACC_CONSEC_INIT:
                     self._rtk_ekf.initialize(lat, lon)
                     self._rtk_good_cnt = 0
-                    logger.info(
+                    logging.info(
                         "RTK EKF initialized at (%.7f, %.7f) — hAcc=%.2fm",
                         lat, lon, hAcc_m,
                     )
@@ -293,7 +292,7 @@ class KfPositionProvider:
                 if self._rtk_bad_cnt >= _HACC_CONSEC_RESET:
                     self._rtk_ekf.reset()
                     self._rtk_bad_cnt = 0
-                    logger.info(
+                    logging.info(
                         "RTK EKF reset — hAcc=%.2fm exceeded threshold %.1fm for %d consecutive fixes",
                         hAcc_m, _HACC_RESET_M, _HACC_CONSEC_RESET,
                     )
