@@ -88,7 +88,7 @@ def latlon_to_body_frame(
     Parameters
     ----------
     cur_lat, cur_lon : 현재 위치 (WGS84)
-    theta_rad        : 현재 heading (rad, North 기준 반시계)
+    theta_rad        : 현재 heading (rad, ENU 기준 — East=0, CCW positive)
     tgt_lat, tgt_lon : 목표 위치 (WGS84)
 
     Returns
@@ -96,9 +96,9 @@ def latlon_to_body_frame(
     dx : 전방 거리 (m)
     dy : 좌방 거리 (m)
     """
-    west_m, north_m = latlon_to_west_north_offset_m(cur_lat, cur_lon, tgt_lat, tgt_lon)
-    dx = math.cos(theta_rad) * north_m + math.sin(theta_rad) * west_m
-    dy = -math.sin(theta_rad) * north_m + math.cos(theta_rad) * west_m
+    east_m, north_m = latlon_to_enu(tgt_lat, tgt_lon, cur_lat, cur_lon)
+    dx = math.cos(theta_rad) * east_m + math.sin(theta_rad) * north_m
+    dy = -math.sin(theta_rad) * east_m + math.cos(theta_rad) * north_m
     return dx, dy
 
 
