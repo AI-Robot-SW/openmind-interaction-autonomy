@@ -373,7 +373,7 @@ class RtkOdomAEKF:
 
     @property
     def theta_rad(self) -> float:
-        """global_yaw_rad 의 alias (route_provider 호환용)."""
+        """global_yaw_rad 의 alias (kf_position_provider 호환용)."""
         return self.global_yaw_rad
 
     @property

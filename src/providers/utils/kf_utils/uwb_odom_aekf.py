@@ -39,8 +39,8 @@ UWB 위치 innovation 이 K_b 를 통해 b_θ 를 간접 업데이트한다.
 
 신호 품질 게이팅
 ---------------
-신호 품질 판단(UwbOdomResidual)은 호출자(route_provider)가 담당한다.
-RTK 의 hAcc 게이팅이 route_provider 에서 이루어지는 것과 동일한 구조.
+신호 품질 판단(UwbOdomResidual)은 호출자(kf_position_provider)가 담당한다.
+RTK 의 hAcc 게이팅이 kf_position_provider 에서 이루어지는 것과 동일한 구조.
 update() 는 호출되면 수신기 freeze 체크만 하고 바로 EKF 에 반영한다.
 
 주의
@@ -236,8 +236,8 @@ class UwbOdomAEKF:
         """
         UWB 위치로 측정 갱신.
 
-        신호 품질 판단은 호출자(route_provider)가 담당한다.
-        RTK 의 hAcc 게이팅이 route_provider 에서 이루어지는 것과 동일한 구조.
+        신호 품질 판단은 호출자(kf_position_provider)가 담당한다.
+        RTK 의 hAcc 게이팅이 kf_position_provider 에서 이루어지는 것과 동일한 구조.
 
         Parameters
         ----------
@@ -337,7 +337,7 @@ class UwbOdomAEKF:
 
     @property
     def theta_rad(self) -> float:
-        """global_yaw_rad 의 alias (route_provider 호환용)."""
+        """global_yaw_rad 의 alias (kf_position_provider 호환용)."""
         return self.global_yaw_rad
 
     @property
