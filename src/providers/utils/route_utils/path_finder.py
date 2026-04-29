@@ -75,19 +75,21 @@ class PathFinder:
         self._loader = GraphLoader(manifest_path, max_cache_size=5)
         self._conn_index = _build_transition_index(self._loader)
 
-    def find_path(self, start: NodeRef, end: NodeRef) -> Optional[list[NodeRef]]:
+    def find_path(self, start: NodeRef, end: NodeRef) -> Optional[list[list[NodeRef]]]:
         """
-        start에서 end까지 최단 경로를 반환한다.
+        start에서 end까지 최단 경로를 coordinate_frame 별로 분리해 반환한다.
 
         Args:
             start: (graph_id, node_id) 출발 노드
             end:   (graph_id, node_id) 도착 노드
 
         Returns:
-            NodeRef 리스트(출발~도착 포함), 경로 없으면 None
+            coordinate_frame이 같은 NodeRef 묶음의 리스트 (segment 단위).
+            예: [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
+            경로 없으면 None
         """
         if start == end:
-            return [start]
+            return [[start]]
 
         dist: dict[NodeRef, float] = {start: 0.0}
         prev: dict[NodeRef, Optional[NodeRef]] = {start: None}
@@ -102,7 +104,7 @@ class PathFinder:
                 continue
 
             if cur == end:
-                return _reconstruct(prev, end)
+                return _split_by_frame(_reconstruct(prev, end), self._loader)
 
             graph = self._loader.get_graph(graph_id)
             node = graph.nodes.get(node_id)
@@ -131,6 +133,33 @@ class PathFinder:
                     heapq.heappush(priority_queue, (new_dist, to_gid, to_nid))
 
         return None
+
+
+def _split_by_frame(path: list[NodeRef], loader: GraphLoader) -> list[list[NodeRef]]:
+    """
+    NodeRef 리스트를 coordinate_frame이 바뀌는 경계에서 분리한다.
+
+    예: [outdoor_1, outdoor_2, indoor_1, indoor_2]
+        → [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
+    """
+    if not path:
+        return []
+
+    segments: list[list[NodeRef]] = []
+    current_segment: list[NodeRef] = [path[0]]
+    current_frame = loader.get_graph(path[0][0]).coordinate_frame
+
+    for ref in path[1:]:
+        frame = loader.get_graph(ref[0]).coordinate_frame
+        if frame != current_frame:
+            segments.append(current_segment)
+            current_segment = [ref]
+            current_frame = frame
+        else:
+            current_segment.append(ref)
+
+    segments.append(current_segment)
+    return segments
 
     def nearest_wgs_node(self, lat: float, lon: float, graph_id: str = "kist_outdoor") -> NodeRef:
         """wgs84 그래프에서 (lat, lon)에 가장 가까운 노드를 반환한다."""
