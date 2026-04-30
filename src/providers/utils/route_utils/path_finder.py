@@ -104,7 +104,7 @@ class PathFinder:
                 continue
 
             if cur == end:
-                return _split_by_frame(_reconstruct(prev, end), self._loader)
+                return self._split_by_frame(_reconstruct(prev, end), self._loader)
 
             graph = self._loader.get_graph(graph_id)
             node = graph.nodes.get(node_id)
@@ -134,33 +134,6 @@ class PathFinder:
 
         return None
 
-
-def _split_by_frame(path: list[NodeRef], loader: GraphLoader) -> list[list[NodeRef]]:
-    """
-    NodeRef 리스트를 coordinate_frame이 바뀌는 경계에서 분리한다.
-
-    예: [outdoor_1, outdoor_2, indoor_1, indoor_2]
-        → [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
-    """
-    if not path:
-        return []
-
-    segments: list[list[NodeRef]] = []
-    current_segment: list[NodeRef] = [path[0]]
-    current_frame = loader.get_graph(path[0][0]).coordinate_frame
-
-    for ref in path[1:]:
-        frame = loader.get_graph(ref[0]).coordinate_frame
-        if frame != current_frame:
-            segments.append(current_segment)
-            current_segment = [ref]
-            current_frame = frame
-        else:
-            current_segment.append(ref)
-
-    segments.append(current_segment)
-    return segments
-
     def nearest_wgs_node(self, lat: float, lon: float, graph_id: str = "kist_outdoor") -> NodeRef:
         """wgs84 그래프에서 (lat, lon)에 가장 가까운 노드를 반환한다."""
         graph = self._loader.get_graph(graph_id)
@@ -187,3 +160,30 @@ def _split_by_frame(path: list[NodeRef], loader: GraphLoader) -> list[list[NodeR
                 place = graph.places[place_id]
                 return (graph_id, place.node_id)
         raise KeyError(f"Place '{place_id}' not found in any registered graph")
+
+    @staticmethod
+    def _split_by_frame(path: list[NodeRef], loader: GraphLoader) -> list[list[NodeRef]]:
+        """
+        NodeRef 리스트를 coordinate_frame이 바뀌는 경계에서 분리한다.
+
+        예: [outdoor_1, outdoor_2, indoor_1, indoor_2]
+            → [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
+        """
+        if not path:
+            return []
+
+        segments: list[list[NodeRef]] = []
+        current_segment: list[NodeRef] = [path[0]]
+        current_frame = loader.get_graph(path[0][0]).coordinate_frame
+
+        for ref in path[1:]:
+            frame = loader.get_graph(ref[0]).coordinate_frame
+            if frame != current_frame:
+                segments.append(current_segment)
+                current_segment = [ref]
+                current_frame = frame
+            else:
+                current_segment.append(ref)
+
+        segments.append(current_segment)
+        return segments
