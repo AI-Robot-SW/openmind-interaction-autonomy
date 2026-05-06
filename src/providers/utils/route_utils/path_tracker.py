@@ -19,7 +19,7 @@ class TrackerNode:
     graph: Graph
 
 
-_REACH_TOL_WGS84_M: float = 3.0   # RTK 정확도 기준 실외 도달 판정
+_REACH_TOL_WGS84_M: float = 5.0   # RTK 정확도 기준 실외 도달 판정
 _REACH_TOL_UWB_M: float = 3.0     # UWB 정확도 기준 실내 도달 판정
 
 
