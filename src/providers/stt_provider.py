@@ -171,6 +171,7 @@ class STTProvider:
         diarization_speaker_count: int = 2,
         single_utterance: bool = False,
         speech_contexts: Optional[List[Dict]] = None,
+        trigger_words: Optional[List[str]] = None,
     ):
         self.running: bool = False
         self.backend = backend
@@ -194,6 +195,7 @@ class STTProvider:
         self._diarization_speaker_count = diarization_speaker_count
         self._single_utterance = single_utterance
         self._speech_contexts = speech_contexts or []
+        self.trigger_words = trigger_words or ["안녕"]
         self._lat = LatencyTracker(sample_rate=self.sample_rate)
 
         # 언어 코드 설정
@@ -267,11 +269,21 @@ class STTProvider:
 
     # ---- Result / Interim handlers (분리) ----
 
+    def is_trigger_word_in_transcript(self, transcript: str) -> bool:
+        """인식된 텍스트에 시동어 포함 여부 검사."""
+        return any(trigger_word in transcript for trigger_word in self.trigger_words)
+
     def _on_result(self, transcript: str) -> None:
         """최종 인식 결과 처리."""
         latency = self._lat.on_result()
         if latency is not None:
             logging.info("STT latency: %.3f sec", latency)
+        if not self.is_trigger_word_in_transcript(transcript):
+            logging.info(
+                "STT result ignored due to missing trigger word: transcript=%r",
+                transcript,
+            )
+            return
         with self._lock:
             self._current_transcript = transcript
         for callback in list(self._result_callbacks):
