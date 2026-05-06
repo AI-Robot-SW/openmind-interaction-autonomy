@@ -155,10 +155,29 @@ class UwbProvider:
 
         self._enter_shell()
 
+        # lec is a toggle. Send lec and wait for confirmation:
+        # - DIST arrives → anchors visible, streaming active
+        # - dwm> prompt returns → no anchors yet, but lec was accepted (streaming will
+        #   start automatically once anchors come into range)
+        buf = bytearray()
         with self._write_lock:
             self.ser.reset_input_buffer()
             self.ser.write(b"lec\r")
             self.ser.flush()
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            chunk = self._read_some()
+            if chunk:
+                buf.extend(chunk)
+                if b"DIST" in buf:
+                    return
+                if b"dwm>" in buf:
+                    logging.debug("UwbProvider: lec accepted, no anchors in range yet")
+                    return
+            time.sleep(0.05)
+
+        raise RuntimeError("UwbProvider: failed to start lec streaming")
     
     def _read_some(self) -> bytes:
         n = int(getattr(self.ser, "in_waiting", 0) or 0)
@@ -193,10 +212,10 @@ class UwbProvider:
             return None
 
         try:
-            x_m = float(parts[1])
-            y_m = float(parts[2])
-            z_m = float(parts[3])
-            quality_factor = int(float(parts[4]))
+            x_m = float(parts[1].decode())
+            y_m = float(parts[2].decode())
+            z_m = float(parts[3].decode())
+            quality_factor = int(float(parts[4].decode()))
         except Exception:
             return None
 
@@ -212,7 +231,8 @@ class UwbProvider:
     def data(self) -> UwbPosRecord:
         """최신 UwbPosRecord. x_m/y_m/quality_factor 가 None이면 포지션 미수신."""
         with self._lock:
-            return self._data        
+            return self._data
+
     def _run(self) -> None:
         buf = bytearray()
 
