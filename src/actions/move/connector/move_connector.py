@@ -9,7 +9,6 @@ from providers.unitree_go2_provider import UnitreeGo2Provider
 # place_id for each navigation destination.
 # Add an entry here when a new destination place is registered in the graph.
 _DESTINATION_PLACES: dict[MovementAction, str] = {
-    MovementAction.GO_TO_A0: "a0",
     MovementAction.GO_TO_L8: "l8",
     MovementAction.GO_TO_NG: "north_gate",
 }
