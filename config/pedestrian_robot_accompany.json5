@@ -71,8 +71,8 @@
   "backgrounds": [
     { "type": "SpeakerBg", "config": { "device_name": "UACDemoV1.0", "sample_rate": 48000, "channels": 2 }},
     { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" }},
-    { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": false } },
-    { "type": "STTBg", "config": { "sample_rate": 44100 } },
+    { "type": "AudioBg", "config": { "sample_rate": 16000,"chunk_size":512, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true, "vad_threshold":0.5 } },
+    { "type": "STTBg", "config": { "sample_rate": 16000 } },
     { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30 } },
     { "type": "SegmentationBg", "config": {} },
     { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
@@ -84,7 +84,8 @@
     { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
     { "type": "NavigationBg", "config": { "tick_dt": 0.05, "speed_step": 0.2, "speed_min": 0.2, "speed_max": null, "calibrating_speed": 0.5 } },
     { "type": "DebugVizBg", "config": { "panel_w": 320, "panel_h": 240, "target_fps": 15.0 }},
-    
+    { "type": "GUIBg", "config": { "host": "0.0.0.0", "port": 8767, "voice_ws_path": "/voice_spectrum", "navi_ws_path": "/navigation", "tts_ws_path": "/tts_text" } }
+
   ],
 
   "agent_inputs": [

@@ -5,7 +5,8 @@ from actions.base import Interface
 
 
 class MovementAction(str, Enum):
-    """Navigation goals (L1/L2/L3/L8/NG), speed adjustment, and posture (sit, stand, damp, stop)."""
+    """Navigation goals (A0/L1/L2/L3/L8/NG), speed adjustment, and posture (sit, stand, damp, stop)."""
+    GO_TO_A0 = "go to A0"
     GO_TO_L1 = "go to L1"
     GO_TO_L2 = "go to L2"
     GO_TO_L3 = "go to L3"

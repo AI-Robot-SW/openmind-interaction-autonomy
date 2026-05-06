@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from inputs.base import Message
 from inputs.plugins.sound_sensor import SoundSensor, SoundSensorConfig
 
 
@@ -41,12 +42,14 @@ class TestSoundSensorConfig:
         config = SoundSensorConfig()
 
         assert config.language == "korean"
+        assert config.dedupe_window_s == 2.0
 
     def test_config_custom_values(self):
         """Test SoundSensorConfig with custom values."""
-        config = SoundSensorConfig(language="english")
+        config = SoundSensorConfig(language="english", dedupe_window_s=1.5)
 
         assert config.language == "english"
+        assert config.dedupe_window_s == 1.5
 
 
 class TestSoundSensorInitialization:
@@ -104,6 +107,33 @@ class TestSoundSensorSTTCallback:
 
         assert sensor.message_buffer.qsize() == 0
 
+    def test_handle_stt_result_deduplicates_recent_match(self, mock_stt):
+        """Test duplicate STT results are ignored inside the dedupe window."""
+        sensor = SoundSensor(config=SoundSensorConfig(dedupe_window_s=2.0))
+
+        with patch("inputs.plugins.sound_sensor.time.time") as mock_time:
+            mock_time.return_value = 100.0
+            sensor._handle_stt_result("L1으로 가자")
+
+            mock_time.return_value = 101.0
+            sensor._handle_stt_result("  L1으로   가자  ")
+
+        assert sensor.message_buffer.qsize() == 1
+        assert sensor.message_buffer.get() == "L1으로 가자"
+
+    def test_handle_stt_result_allows_match_after_window(self, mock_stt):
+        """Test duplicate STT results are accepted after the dedupe window."""
+        sensor = SoundSensor(config=SoundSensorConfig(dedupe_window_s=2.0))
+
+        with patch("inputs.plugins.sound_sensor.time.time") as mock_time:
+            mock_time.return_value = 100.0
+            sensor._handle_stt_result("L1으로 가자")
+
+            mock_time.return_value = 103.0
+            sensor._handle_stt_result("L1으로 가자")
+
+        assert sensor.message_buffer.qsize() == 2
+
 
 class TestSoundSensorPoll:
     """Test SoundSensor polling."""
@@ -155,8 +185,8 @@ class TestSoundSensorRawToText:
         asyncio.run(sensor.raw_to_text("두번째"))
 
         assert len(sensor.messages) == 1
-        assert "첫번째" in sensor.messages[0]
-        assert "두번째" in sensor.messages[0]
+        assert "첫번째" in sensor.messages[0].message
+        assert "두번째" in sensor.messages[0].message
 
 
 class TestSoundSensorFormattedBuffer:
@@ -173,7 +203,7 @@ class TestSoundSensorFormattedBuffer:
     def test_formatted_latest_buffer_with_message(self, config, mock_stt):
         """Test formatted buffer with message."""
         sensor = SoundSensor(config=config)
-        sensor.messages = ["테스트 메시지"]
+        sensor.messages = [Message(timestamp=time.time(), message="테스트 메시지")]
 
         result = sensor.formatted_latest_buffer()
 
@@ -185,7 +215,7 @@ class TestSoundSensorFormattedBuffer:
     def test_formatted_latest_buffer_format(self, config, mock_stt):
         """Test formatted buffer has correct format."""
         sensor = SoundSensor(config=config)
-        sensor.messages = ["안녕하세요"]
+        sensor.messages = [Message(timestamp=time.time(), message="안녕하세요")]
 
         result = sensor.formatted_latest_buffer()
 
