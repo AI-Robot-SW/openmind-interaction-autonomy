@@ -11,6 +11,9 @@ from providers.unitree_go2_provider import UnitreeGo2Provider
 _DESTINATION_PLACES: dict[MovementAction, str] = {
     MovementAction.GO_TO_L8: "l8",
     MovementAction.GO_TO_NG: "north_gate",
+    MovementAction.GO_TO_L8_F1_MAIN_ENTRANCE: "l8_f1_main_entrance",
+    MovementAction.GO_TO_L8_F1_STAIR_1: "l8_f1_stair_1",
+    MovementAction.GO_TO_L8_F1_ELEVATOR_1: "l8_f1_elevator_1",
 }
 
 
