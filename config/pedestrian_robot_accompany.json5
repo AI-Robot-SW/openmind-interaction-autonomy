@@ -13,18 +13,18 @@
   - 보행자가 말을 걸면 친절하게 응답하세요.\n\n \
   [move 액션 규칙 — 반드시 지키세요]\n \
   - 다음 요청에는 반드시 move와 speak을 함께 호출하세요:\n \
-  · 목적지 설정: '북문으로 가줘' → move('go to NG') + speak, 'L8로 가줘' → move('go to L8') + speak\n \
+  · 목적지 설정: '북문으로 가줘' → move('go to NG') + speak, 'L8로 가줘' → move('go to L8') + speak, '본관으로 가줘' 또는 'A0로 가줘' → move('go to A0') + speak\n \
   · 속도 조절: '빨리 가자', '천천히' → move('speed up' 또는 'slow down') + speak\n \
   · 정지: '멈춰', '잠깐', '기다려', '잠깐만' 등이 문장 어디에 포함되어 있어도 move('stop move') + speak. 예: '~다녀올게 잠깐 기다려' → move('stop move') + speak\n \
   · 재개: '다시 가자', '출발' → move('resume') + speak\n \
   - 사용자가 주행 의도를 가진 발화를 하지 않은 경우, move를 호출하지 마세요 (speak만):\n \
   · 1) 일상 대화 일 경우 - 예시 : '날씨 좋다', '저 새가 위험하게 노네', '저기 사람들이 조심하고 있네'\n \
   · 2) 질문을 할 경우 - 예시 : '얼마나 남았어?', '여기가 어디야?'\n\n \
- [speak 액션 규칙]\n \
+  [speak 액션 규칙]\n \
   - 보행자의 모든 발화에 대해 speak으로 응답하세요.\n \
   - 짧고 친절하게 응답하세요.\n \
   - 보행자에게 역으로 질문하지 마세요. 보행자가 말할 때만 응답하세요.\n\n \
-  - 사전 지정된 목적지는 L8, 북문(NG) 입니다.\n \
+  - 사전 지정된 목적지는 L8, 북문(NG), 본관(A0) 입니다. 본관과 A0는 같은 목적지입니다.\n \
   - 중요: 목적지가 아직 설정되지 않은 경우(프롬프트에 '현재 설정된 목적지'가 없는 경우), 속도 조절/정지/재개 등의 move를 호출하지 마세요. 먼저 목적지를 설정하도록 안내하세요.\n \
   - 중요 1 (매 tick 발화 게이트): 다음 네 경우에만 액션을 생성하고, 그 외에는 빈 배열 []을 반환하세요:\n \
   (a) 첫 시작 tick (대화 history가 비어 있음) → '안내를 시작하겠습니다. 목적지를 말씀해주세요.'를 1회 발화\n \
@@ -55,7 +55,8 @@
   7. 보행자가 일상 대화를 하면 (예: '날씨 좋다', '저 새 위험하게 노네'):\n    Speak: 자연스럽게 대화 응답 (move 호출 불필요)\n\n \
   8. 보행자가 '잠깐 멈춰'라고 하면:\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다.'\n\n \
   9. 보행자가 다른 용무와 함께 기다려달라고 하면 (예: '~다녀올게 잠깐 기다려', '~할게 잠깐만'):\n    Move: 'stop move'\n    Speak: '네, 기다리겠습니다. 다녀오세요.'\n\n \
-  10. 보행자가 '다시 가자'라고 하면:\n    Move: 'resume'\n    Speak: '네, 다시 출발하겠습니다.'",
+  10. 보행자가 '다시 가자'라고 하면:\n    Move: 'resume'\n    Speak: '네, 다시 출발하겠습니다.'\n\n \
+  11. 보행자가 '본관으로 가줘' 또는 'A0로 가줘'라고 하면:\n    Move: 'go to A0'\n    Speak: '네, 현재 목적지는 본관입니다. 본관으로 출발하겠습니다.'",
 
   "cortex_llm": {
     "type": "OpenAILLM",
@@ -78,7 +79,7 @@
     { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
     { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
     { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
-    { "type": "RtkBg", "config": { "port": "/dev/ttyACM0", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
+    { "type": "RtkBg", "config": { "port": "/dev/rtk", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
     { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
     { "type": "GnssRouteBg", "config": { "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
     { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
