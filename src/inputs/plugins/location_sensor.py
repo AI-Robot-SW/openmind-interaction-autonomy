@@ -13,7 +13,7 @@ Architecture:
 Dependencies:
     - RtkProvider: RTK GPS 위치 데이터 (singleton, rtk_bg에서 초기화)
     - UwbProvider: UWB 실내 위치 데이터 (singleton, uwb_bg에서 초기화)
-    - NavigationProvider: 주행 상태/속도/목표 (singleton, gnss_route_bg에서 초기화)
+    - NavigationProvider: 주행 상태/속도/목표 (singleton, path_follow_bg에서 초기화)
 """
 
 import asyncio
