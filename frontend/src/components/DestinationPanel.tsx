@@ -10,9 +10,9 @@ function formatDestination(
 }
 
 export default function DestinationPanel() {
-  const activeGoal = useNavigationStore((s) => s.getDisplayName(s.activeGoal));
+  const activeGoal = useNavigationStore((s) => s.activeGoal);
   const reached = useNavigationStore((s) => s.reached);
-  const lastReachedGoal = useNavigationStore((s) => s.getDisplayName(s.lastReachedGoal));
+  const lastReachedGoal = useNavigationStore((s) => s.lastReachedGoal);
 
   const destination = formatDestination(activeGoal, reached, lastReachedGoal);
 
