@@ -47,10 +47,12 @@ import yaml
 from actions import load_action
 from actions.move.interface import MoveInput, MovementAction
 from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
+from providers.debug_viz_provider import DebugVizProvider
 from providers.distmap_provider import DistMapProvider
 from providers.dwa_route_provider import DwaRouteProvider
-from providers.gnss_route_provider import GnssRouteProvider
+from providers.kf_position_provider import KfPositionProvider
 from providers.navigation_provider import NavigationProvider
+from providers.path_follow_provider import PathFollowProvider
 from providers.pointcloud_provider import PointCloudProvider
 from providers.realsense_camera_provider import RealSenseCameraProvider
 from providers.rtk_provider import RtkProvider
@@ -154,7 +156,7 @@ def setup_providers(args) -> None:
     Mirrors what the background stack does when running the full system:
       UnitreeGo2Bg → LocationBg → RealSenseCameraBg → SegmentationBg
       → PointCloudBg → BEVOccupancyGridBg → DistMapBg
-      → GnssRouteBg + DwaRouteProviderBg → NavigationProvider
+      → PathFollowBg + DwaRouteProviderBg → NavigationProvider
     """
     # 1. Robot SDK — required for all posture and move commands
     unitree = UnitreeGo2Provider(channel=args.ethernet)
@@ -184,15 +186,26 @@ def setup_providers(args) -> None:
     BEVOccupancyGridProvider().start()
     DistMapProvider().start()
 
-    # 5. Navigation stack — singleton creation only; start() is called lazily inside set_goal()
-    NavigationProvider()
-    logging.info("NavigationProvider singleton created")
+    # 5. Navigation stack — KfPosition → PathFollow → DWA → Navigation 순으로 시작
+    KfPositionProvider().start()
+    PathFollowProvider().start()
+    DwaRouteProvider().start()
+    NavigationProvider().start()
+    logging.info("Navigation stack started")
+
+    # 6. Debug visualizer — 모든 provider 시작 후 마지막에 시작
+    DebugVizProvider().start()
+    logging.info("DebugVizProvider started")
 
 
 def teardown_providers() -> None:
     """Stop all providers that were started in setup_providers (reverse order)."""
     for name, stop_fn in [
+        ("DebugVizProvider",         lambda: DebugVizProvider().stop()),
         ("NavigationProvider",       lambda: NavigationProvider().stop()),
+        ("DwaRouteProvider",         lambda: DwaRouteProvider().stop()),
+        ("PathFollowProvider",       lambda: PathFollowProvider().stop()),
+        ("KfPositionProvider",       lambda: KfPositionProvider().stop()),
         ("DistMapProvider",          lambda: DistMapProvider().stop()),
         ("BEVOccupancyGridProvider", lambda: BEVOccupancyGridProvider().stop()),
         ("PointCloudProvider",       lambda: PointCloudProvider().stop()),
