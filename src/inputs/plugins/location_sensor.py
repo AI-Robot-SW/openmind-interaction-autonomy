@@ -245,8 +245,8 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationSnapshot]
         if raw_input.nav_vx > 0:
             nav_parts.append(f"Speed: {raw_input.nav_vx:.2f}m/s")
 
-        if not raw_input.nav_heading_calibrated and raw_input.nav_mode == "CALIBRATING":
-            nav_parts.append("heading calibrating")
+        if not raw_input.nav_heading_calibrated:
+            nav_parts.append("heading not calibrated")
 
         parts.append("[Navigation] " + " | ".join(nav_parts))
 

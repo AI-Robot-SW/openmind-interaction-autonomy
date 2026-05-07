@@ -55,9 +55,9 @@ class OdomResidualBase:
     유효 fix 확인 시 _record_sensor() 를 호출한다.
     """
 
-    _TOTAL_WINDOW: int = 15
-    _STD_ENTER_THRESHOLD_M: float = 0.001
-    _STD_EXIT_THRESHOLD_M: float = 0.001
+    _TOTAL_WINDOW: int = 7
+    _STD_ENTER_THRESHOLD_M: float = 0.2
+    _STD_EXIT_THRESHOLD_M: float = 0.7
 
     def __init__(self) -> None:
         self._previous_pos: Optional[tuple[float, float]] = None
