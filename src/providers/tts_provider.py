@@ -185,6 +185,7 @@ class TTSProvider:
         sampling_rate: int = 24000,
         alpha: int = 0,
         end_pitch: int = 0,
+        
     ):
         """
         TTS Provider 초기화.
@@ -281,6 +282,9 @@ class TTSProvider:
         self._lock = threading.Lock()
         self._processing_thread: Optional[threading.Thread] = None
 
+        # text 변수 
+        self._current_text: str = ""
+        self._is_speaking = False
         # TODO: AudioOutputStream 초기화
         # self._audio_stream: AudioOutputStream = AudioOutputStream(
         #     url=url,
@@ -333,8 +337,10 @@ class TTSProvider:
                 "backend": self.backend.value,
                 "speaker": self._speaker,
                 "running": self.running,
+                "current_text": self._current_text,
             }
 
+        
     def register_tts_state_callback(
         self, callback: Callable[[TTSState], None]
     ) -> None:
@@ -671,7 +677,12 @@ class TTSProvider:
 
                 # 처리 시작
                 self._set_state(TTSState.PROCESSING)
-                text_preview = request.get("text", "")[:30]
+                text = request.get("text", "")
+                text_preview = text[:30]
+                with self._lock:
+                    self._is_speaking = True
+                    self._current_text = text
+                    
                 logging.debug(f"Processing TTS: {text_preview}...")
 
                 # TTS 합성
@@ -690,6 +701,7 @@ class TTSProvider:
                     for callback in self._audio_callbacks:
                         try:
                             callback(audio_data)
+                            
                         except Exception as e:
                             logging.error(f"Audio callback error: {e}")
 
@@ -702,7 +714,10 @@ class TTSProvider:
 
                 # 완료
                 self._set_state(TTSState.IDLE)
+                with self._lock:
+                    self._is_speaking = False
                 self._pending_requests.task_done()
+                
 
             except queue.Empty:
                 # 타임아웃 - 계속 대기
@@ -710,7 +725,12 @@ class TTSProvider:
             except Exception as e:
                 logging.error(f"TTS processing error: {e}")
                 self._set_state(TTSState.ERROR)
-
+   
+    def get_tts_text(self) -> str:
+        """현재 처리 중인 TTS 텍스트 반환."""
+        with self._lock:
+            return self._current_text
+   
     def interrupt(self) -> None:
         """
         현재 TTS 처리 중단.

@@ -10,28 +10,28 @@
 #   4: curb
 
 driveable:
-  - 7   # road
-  - 8   # lane marking (general)
-  - 11  # parking
-  - 15  # bike lane
-  - 23  # service lane
-  - 28  # pedestrian area
-  - 41  # crosswalk (plain)
+  - 7   # bike lane
+  - 8   # crosswalk-plain (general)
+  - 11  # pedestrian area
+  - 15  # sidewalk
+  - 23  # lane MK-cross
+  - 28  # snow
+  - 41  # manhole
 
 person:
   - 19  # person
 
 avoid:
-  - 6   # barrier
-  - 13  # wall
-  - 29  # trash can
-  - 30  # bicycle
-  - 52  # car
-  - 54  # motorcycle
-  - 55  # on rails
-  - 57  # bus
-  - 59  # truck
+  - 6   # wall
+  - 13  # road
+  - 29  # terrain
+  - 30  # vegetation
+  - 52  # bicycle
+  - 54  # bus
+  - 55  # car
+  - 57  # motorcycle
+  - 59  # other vehicle
 
 curb:
   - 2   # curb
-  - 24  # curb cut
+  - 24  # lane MK-general
