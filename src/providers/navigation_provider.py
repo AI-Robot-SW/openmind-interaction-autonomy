@@ -3,33 +3,21 @@ import logging
 import math
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass
-from typing import Any, Deque, Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from .singleton import singleton
 from .rtk_provider import RtkProvider
-from .gnss_route_provider import GnssRouteProvider
+from .path_follow_provider import PathFollowProvider
+from .kf_position_provider import KfPositionProvider
 from .dwa_route_provider import DwaRouteProvider
-from .unitree_go2_provider import UnitreeGo2Provider
-from .utils.geo_utils import haversine_dist_m, latlon_to_west_north_offset_m, wrap_deg
-from .utils.route_utils.graph_utils import PathFinder, PathTracker
-from .utils.kf_utils import YawOffsetKF
+
+from .utils.geo_utils import haversine_dist_m
+from .utils.route_utils import PathFinder
+from .utils.route_utils.path_tracker import PathTracker
+from .utils.route_utils.graph_model import NodeRef
 
 logger = logging.getLogger(__name__)
-
-
-# ==============================================================================
-# helper dataclasses
-# ==============================================================================
-@dataclass(frozen=True)
-class HeadingAlignmentSample:
-    t_monotonic: float
-    gnss_lat: float
-    gnss_lon: float
-    odom_x: float
-    odom_y: float
-    odom_yaw_deg: float
 
 
 # ==============================================================================
@@ -52,13 +40,11 @@ class NavigationState:
 @singleton
 class NavigationProvider:
     """
-    GnssRouteProvider + DwaRouteProvider를 wrapping하는 Navigation Provider.
+    PathFollowProvider + DwaRouteProvider를 wrapping하는 Navigation Provider.
 
-    변경점:
-      - 기존 calibration phase 제거
-      - yaw offset은 YawOffsetKF로 실시간 추정
-      - GNSS displacement heading vs odom displacement heading 차이를 측정값으로 사용
-      - 충분한 관측이 쌓이면 heading_calibrated=True
+    PathFollowProvider(KF 측위 기반 실내외 통합 경로 추종)를 경로 입력으로 사용하고,
+    DwaRouteProvider가 장애물 회피 DWA 속도 명령을 생성한다.
+    heading calibration은 KfPositionProvider가 내부에서 처리한다.
     """
 
     def __init__(
@@ -67,22 +53,11 @@ class NavigationProvider:
         speed_step: float = 0.2,
         speed_min: float = 0.2,
         speed_max: Optional[float] = None,   # None이면 dwa.v_max 사용
-
-        # yaw offset KF params
-        yaw_offset_p_init_deg2: float = 180.0 ** 2,
-        yaw_offset_q_deg2_per_sec: float = 0.05,
-        yaw_offset_r_deg2: float = 25.0,
-        yaw_offset_converged_std_deg: float = 10.0,
-        yaw_offset_min_updates_for_convergence: int = 3,
-
-        # measurement gating params
-        alignment_min_baseline_m: float = 1.0,
-        alignment_max_window_sec: float = 3.0,
-        alignment_max_turn_deg: float = 20.0,
     ) -> None:
-        self._gnss = GnssRouteProvider()
+        self._path_finder = PathFinder()
+        self._path_follow = PathFollowProvider()
+        self._kf_pos = KfPositionProvider()
         self._dwa = DwaRouteProvider()
-        self._unitree = UnitreeGo2Provider()
 
         self._tick_dt = float(tick_dt)
         self._speed_step = float(speed_step)
@@ -91,24 +66,8 @@ class NavigationProvider:
 
         self._active_goal: Optional[str] = None
         self._speed_before_pause: Optional[float] = None
-        self._path_finder = PathFinder()
-
-        # yaw offset estimation state
-        self._yaw_offset_kf = YawOffsetKF(
-            p_init_deg2=float(yaw_offset_p_init_deg2),
-            q_deg2_per_sec=float(yaw_offset_q_deg2_per_sec),
-            r_deg2=float(yaw_offset_r_deg2),
-            converged_std_deg=float(yaw_offset_converged_std_deg),
-            min_updates_for_convergence=int(yaw_offset_min_updates_for_convergence),
-        )
-        self._yaw_offset_deg: float = 0.0
-        self._heading_calibrated: bool = False
-        self._last_yaw_kf_predict_t: float = time.monotonic()
-
-        self._alignment_min_baseline_m = float(alignment_min_baseline_m)
-        self._alignment_max_window_sec = float(alignment_max_window_sec)
-        self._alignment_max_turn_deg = float(alignment_max_turn_deg)
-        self._heading_alignment_samples: Deque[HeadingAlignmentSample] = deque(maxlen=256)
+        self._current_path: Optional[list[list[NodeRef]]] = None
+        self._path_is_set: bool = False
 
         self._last_path_retry_log_t: float = 0.0
 
@@ -124,12 +83,6 @@ class NavigationProvider:
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
-
-        self._heading_alignment_samples.clear()
-        self._last_yaw_kf_predict_t = time.monotonic()
-
-        self._gnss.start()
-        self._dwa.start()
 
         self._stop_evt.clear()
         self.running = True
@@ -153,11 +106,6 @@ class NavigationProvider:
             logger.warning("NavigationProvider worker thread did not stop within timeout")
         self._thread = None
 
-        self._dwa.stop()
-        self._gnss.stop()
-
-        self._heading_alignment_samples.clear()
-
         with self._state_lock:
             self._latest_state = NavigationState(
                 t_monotonic=time.monotonic(),
@@ -169,17 +117,9 @@ class NavigationProvider:
     # ---------------- control API ----------------
 
     def set_goal(self, place_id: str) -> None:
-        """
-        place 이름으로 목표를 설정한다.
-
-        이 버전에서는 calibration phase를 기다리지 않고
-        가능한 즉시 현재 GNSS 위치 기준으로 경로를 탐색한다.
-        yaw offset은 백그라운드에서 계속 보정된다.
-        """
-        if not self.running:
-            self.start()
-
+        """place 이름으로 목표를 설정한다. GNSS 준비 전이면 worker loop에서 재시도한다."""
         self._active_goal = place_id
+        self._path_is_set = False
 
         try:
             self._compute_and_set_path(place_id)
@@ -190,7 +130,11 @@ class NavigationProvider:
             )
 
     def _compute_and_set_path(self, place_id: str) -> None:
-        """현재 GNSS 위치 기준으로 경로를 탐색하고 GnssRouteProvider에 주입한다."""
+        """현재 GNSS 위치 기준으로 경로를 탐색하고 PathFollowProvider에 주입한다."""
+        kf = self._kf_pos.data
+        if kf is None or not kf.rtk_ready or not kf.rtk_yaw_calibrated:
+            raise ValueError("NavigationProvider: KF heading 보정이 아직 완료되지 않았습니다")
+
         gnss = RtkProvider().data
         if gnss is None or gnss.lat is None or gnss.lon is None:
             raise ValueError("NavigationProvider: GNSS 위치를 아직 사용할 수 없습니다")
@@ -198,19 +142,21 @@ class NavigationProvider:
         start_ref = self._path_finder.nearest_wgs_node(float(gnss.lat), float(gnss.lon))
         goal_ref = self._path_finder.resolve_place_to_node(place_id)
 
-        path = self._path_finder.find_path(start_ref, goal_ref)
-        if path is None:
+        segments = self._path_finder.find_path(start_ref, goal_ref)
+        if segments is None:
             raise ValueError(
                 f"NavigationProvider: {start_ref} -> {goal_ref} 경로를 찾을 수 없습니다"
             )
 
-        tracker = PathTracker(path, self._path_finder._loader)
-        self._gnss.set_yaw_offset(self._yaw_offset_deg)
-        self._gnss.set_tracker(tracker)
+        trackers = [PathTracker(seg, self._path_finder._loader) for seg in segments]
+        self._path_follow.set_trackers(trackers)
+        self._current_path = segments
+        self._path_is_set = True
 
+        total_nodes = sum(len(s) for s in segments)
         logger.info(
-            "NavigationProvider: path set '%s' -> %s (%d nodes), yaw_offset_deg=%.2f",
-            place_id, goal_ref, len(path), self._yaw_offset_deg,
+            "NavigationProvider: path set '%s' -> %s (%d nodes, %d segments)",
+            place_id, goal_ref, total_nodes, len(segments),
         )
 
     def step_faster(self) -> None:
@@ -234,7 +180,8 @@ class NavigationProvider:
 
     def pause(self) -> None:
         """속도를 0으로 설정합니다. 경로와 내비게이션 스레드는 유지됩니다."""
-        self._speed_before_pause = float(self._dwa.vx_fixed)
+        if self._speed_before_pause is None:
+            self._speed_before_pause = float(self._dwa.vx_fixed)
         self._dwa.vx_fixed = 0.0
         logger.info("NavigationProvider.pause: speed %.2f -> 0.0 m/s", self._speed_before_pause)
 
@@ -248,7 +195,9 @@ class NavigationProvider:
     def clear_goal(self) -> None:
         """경로를 초기화합니다."""
         self._active_goal = None
-        self._gnss.set_tracker(None)
+        self._current_path = None
+        self._path_is_set = False
+        self._path_follow.set_trackers([])
         logger.info("NavigationProvider.clear_goal")
 
     def get_active_goal(self) -> Optional[str]:
@@ -261,40 +210,41 @@ class NavigationProvider:
 
     def get_remaining_distance(self) -> float:
         """현재 위치에서 경로 끝까지의 남은 거리 (m) 를 반환합니다."""
-        tracker = self._gnss.tracker
-        if tracker is None or tracker.is_done:
+        segments = self._current_path
+        if not segments:
             return 0.0
 
-        current = tracker.current_node
-        if current is None or current.graph.coordinate_frame != "wgs84":
+        route_rec = self._path_follow.data
+        if route_rec is None or route_rec.is_done:
             return 0.0
 
-        try:
-            gnss = RtkProvider().data
-            if gnss is None:
-                return 0.0
-            lat, lon = float(gnss.lat), float(gnss.lon)
-        except Exception:
-            return 0.0
-
-        total = haversine_dist_m(lat, lon, current.node.lat, current.node.lon)
-
-        idx, total_nodes = tracker.progress
-        path = tracker.path
+        # segments를 flat하게 펼쳐 인덱스 기반으로 누적 거리 계산
+        flat_path: list[NodeRef] = [ref for seg in segments for ref in seg]
+        idx = route_rec.node_idx
         loader = self._path_finder._loader
-        for i in range(idx + 1, total_nodes):
-            a_gid, a_nid = path[i - 1]
-            b_gid, b_nid = path[i]
-            if a_gid != b_gid or a_gid != "kist_outdoor":
+
+        total = math.hypot(route_rec.dx, route_rec.dy)
+
+        for i in range(idx + 1, len(flat_path)):
+            a_gid, a_nid = flat_path[i - 1]
+            b_gid, b_nid = flat_path[i]
+            try:
+                a_graph = loader.get_graph(a_gid)
+                b_graph = loader.get_graph(b_gid)
+                a_node = a_graph.nodes.get(a_nid)
+                b_node = b_graph.nodes.get(b_nid)
+                if a_node is None or b_node is None:
+                    continue
+                if a_graph.coordinate_frame == "wgs84" \
+                        and a_node.lat is not None and a_node.lon is not None \
+                        and b_node.lat is not None and b_node.lon is not None:
+                    total += haversine_dist_m(a_node.lat, a_node.lon, b_node.lat, b_node.lon)
+                elif a_graph.coordinate_frame != "wgs84" \
+                        and a_node.x is not None and a_node.y is not None \
+                        and b_node.x is not None and b_node.y is not None:
+                    total += math.hypot(b_node.x - a_node.x, b_node.y - a_node.y)
+            except Exception:
                 continue
-            graph = loader.get_graph(a_gid)
-            a_node, b_node = graph.nodes.get(a_nid), graph.nodes.get(b_nid)
-            if (
-                a_node is not None and b_node is not None
-                and a_node.lat is not None and b_node.lat is not None
-                and a_node.lon is not None and b_node.lon is not None
-            ):
-                total += haversine_dist_m(a_node.lat, a_node.lon, b_node.lat, b_node.lon)
 
         return float(total)
 
@@ -319,159 +269,14 @@ class NavigationProvider:
             "reached_goal": st.reached_goal,
         }
 
-    # ---------------- yaw offset estimation helpers ----------------
-
-    def _publish_current_yaw_offset(self) -> None:
-        self._yaw_offset_deg = float(self._yaw_offset_kf.x)
-        self._heading_calibrated = bool(self._yaw_offset_kf.converged)
-        self._gnss.set_yaw_offset(self._yaw_offset_deg, self._heading_calibrated)
-
-    def _compute_heading_measurement_variance_deg2(
-        self,
-        gnss_horizontal_accuracy_m: float,
-        baseline_m: float,
-    ) -> float:
-        """
-        두 GNSS position 차분으로 heading을 계산할 때의 분산 근사.
-
-        sigma_heading_rad ≈ sqrt(2) * sigma_pos / baseline
-        """
-        sigma_position_m = max(float(gnss_horizontal_accuracy_m), 0.05)
-        baseline_m = max(float(baseline_m), 0.1)
-
-        sigma_heading_rad = math.sqrt(2.0) * sigma_position_m / baseline_m
-        sigma_heading_deg = math.degrees(sigma_heading_rad)
-
-        # 너무 낙관적으로 작아지지 않도록 하한
-        sigma_heading_deg = max(sigma_heading_deg, 1.0)
-        return sigma_heading_deg ** 2
-
-    def _select_alignment_reference_sample(
-        self,
-        latest_sample: HeadingAlignmentSample,
-    ) -> Optional[HeadingAlignmentSample]:
-        """
-        latest_sample과 비교할 기준 샘플을 찾는다.
-
-        조건:
-          - 너무 오래된 샘플은 제외
-          - odom baseline이 충분한 샘플만 허용
-          - deque는 오래된 순서로 순회되므로, 가능한 한 baseline이 큰 샘플이 먼저 잡힌다
-        """
-        for old_sample in self._heading_alignment_samples:
-            age_sec = latest_sample.t_monotonic - old_sample.t_monotonic
-            if age_sec <= 0.0:
-                continue
-            if age_sec > self._alignment_max_window_sec:
-                continue
-
-            odom_dx = latest_sample.odom_x - old_sample.odom_x
-            odom_dy = latest_sample.odom_y - old_sample.odom_y
-            odom_baseline_m = math.hypot(odom_dx, odom_dy)
-
-            if odom_baseline_m < self._alignment_min_baseline_m:
-                continue
-
-            return old_sample
-
-        return None
-
-    def _update_yaw_offset_filter(self, gnss_rtk: Any) -> None:
-        """
-        실시간 yaw offset 추정.
-
-        1) KF predict
-        2) 최신 GNSS + odom sample 적재
-        3) baseline / RTK 품질 / turn gating을 통과하면
-           GNSS heading - odom heading 으로 KF update
-        """
-        now = time.monotonic()
-        dt_sec = now - self._last_yaw_kf_predict_t
-        self._last_yaw_kf_predict_t = now
-
-        self._yaw_offset_kf.predict(dt_sec)
-        self._publish_current_yaw_offset()
-
-        odom = self._unitree.get_odometry()
-        if odom is None:
-            return
-
-        if gnss_rtk is None:
-            return
-
-        if gnss_rtk.lat is None or gnss_rtk.lon is None:
-            return
-
-        try:
-            latest_sample = HeadingAlignmentSample(
-                t_monotonic=now,
-                gnss_lat=float(gnss_rtk.lat),
-                gnss_lon=float(gnss_rtk.lon),
-                odom_x=float(odom.x),
-                odom_y=float(odom.y),
-                odom_yaw_deg=math.degrees(float(odom.yaw)),
-            )
-        except Exception:
-            return
-
-        self._heading_alignment_samples.append(latest_sample)
-
-        # RTK quality gating
-        if (gnss_rtk.carrSoln or 0) < 1:
-            return
-
-        reference_sample = self._select_alignment_reference_sample(latest_sample)
-        if reference_sample is None:
-            return
-
-        odom_dx = latest_sample.odom_x - reference_sample.odom_x
-        odom_dy = latest_sample.odom_y - reference_sample.odom_y
-        odom_baseline_m = math.hypot(odom_dx, odom_dy)
-        if odom_baseline_m < self._alignment_min_baseline_m:
-            return
-
-        # 너무 많이 회전한 윈도우는 displacement heading 비교에 부적합
-        odom_turn_deg = abs(wrap_deg(latest_sample.odom_yaw_deg - reference_sample.odom_yaw_deg))
-        if odom_turn_deg > self._alignment_max_turn_deg:
-            return
-
-        gnss_west_m, gnss_north_m = latlon_to_west_north_offset_m(
-            reference_sample.gnss_lat,
-            reference_sample.gnss_lon,
-            latest_sample.gnss_lat,
-            latest_sample.gnss_lon,
-        )
-        gnss_baseline_m = math.hypot(gnss_west_m, gnss_north_m)
-        if gnss_baseline_m < self._alignment_min_baseline_m:
-            return
-
-        gnss_heading_deg = math.degrees(math.atan2(gnss_west_m, gnss_north_m))
-        odom_heading_deg = math.degrees(math.atan2(odom_dy, odom_dx))
-        measured_yaw_offset_deg = wrap_deg(gnss_heading_deg - odom_heading_deg)
-
-        baseline_m = min(gnss_baseline_m, odom_baseline_m)
-        gnss_horizontal_accuracy_m = float(getattr(gnss_rtk, "hAcc_m", 1.0) or 1.0)
-
-        measurement_variance_deg2 = self._compute_heading_measurement_variance_deg2(
-            gnss_horizontal_accuracy_m=gnss_horizontal_accuracy_m,
-            baseline_m=baseline_m,
-        )
-
-        self._yaw_offset_kf.update(
-            z_deg=measured_yaw_offset_deg,
-            r_deg2=measurement_variance_deg2,
-        )
-        self._publish_current_yaw_offset()
+    # ---------------- helpers ----------------
 
     def _retry_set_path_if_needed(self) -> None:
         """
-        goal은 있는데 tracker가 아직 없다면 경로 탐색을 재시도한다.
+        goal은 있는데 path가 아직 설정되지 않았다면 경로 탐색을 재시도한다.
         set_goal() 시점에 GNSS가 아직 준비되지 않았던 경우를 커버하기 위함.
         """
-        if self._active_goal is None:
-            return
-
-        if self._gnss.tracker is not None:
+        if self._active_goal is None or self._path_is_set:
             return
 
         try:
@@ -490,24 +295,25 @@ class NavigationProvider:
     def _run(self) -> None:
         while not self._stop_evt.is_set():
             try:
-                gnss_rtk = RtkProvider().data
-
-                # yaw offset을 항상 실시간 추정
-                self._update_yaw_offset_filter(gnss_rtk)
-
-                # 필요한 경우 path 재시도
                 self._retry_set_path_if_needed()
 
                 # DWA 기반 경로 추종
                 rec = self._dwa.data
-                gnss_rec = self._gnss.data
-                reached_goal = bool(gnss_rec.reached_goal if gnss_rec is not None else False)
+                route_rec = self._path_follow.data
+                reached_goal = bool(route_rec.is_done if route_rec is not None else False)
+
+                # heading_calibrated: KfPositionProvider 기준
+                kf = self._kf_pos.data
+                heading_calibrated = bool(
+                    (kf.rtk_yaw_calibrated if kf is not None and kf.rtk_ready else False)
+                    or (kf.uwb_yaw_calibrated if kf is not None and kf.uwb_ready else False)
+                )
 
                 if rec is None:
                     st = NavigationState(
                         t_monotonic=time.monotonic(),
                         mode="IDLE",
-                        heading_calibrated=self._heading_calibrated,
+                        heading_calibrated=heading_calibrated,
                         reached_goal=reached_goal,
                     )
                 else:
@@ -525,7 +331,7 @@ class NavigationProvider:
                         vy=0.0,
                         vyaw=vyaw,
                         mode=mode,
-                        heading_calibrated=self._heading_calibrated,
+                        heading_calibrated=heading_calibrated,
                         reached_goal=reached_goal,
                     )
 
@@ -536,5 +342,3 @@ class NavigationProvider:
                 logger.exception("Error in NavigationProvider worker loop")
 
             self._stop_evt.wait(self._tick_dt)
-
-
