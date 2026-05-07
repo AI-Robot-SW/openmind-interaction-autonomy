@@ -13,7 +13,7 @@ Architecture:
 Dependencies:
     - RtkProvider: RTK GPS 위치 데이터 (singleton, rtk_bg에서 초기화)
     - UwbProvider: UWB 실내 위치 데이터 (singleton, uwb_bg에서 초기화)
-    - NavigationProvider: 주행 상태/속도/목표 (singleton, gnss_route_bg에서 초기화)
+    - NavigationProvider: 주행 상태/속도/목표 (singleton, path_follow_bg에서 초기화)
 """
 
 import asyncio
@@ -245,8 +245,8 @@ class LocationSensor(FuserInput[LocationSensorConfig, Optional[LocationSnapshot]
         if raw_input.nav_vx > 0:
             nav_parts.append(f"Speed: {raw_input.nav_vx:.2f}m/s")
 
-        if not raw_input.nav_heading_calibrated and raw_input.nav_mode == "CALIBRATING":
-            nav_parts.append("heading calibrating")
+        if not raw_input.nav_heading_calibrated:
+            nav_parts.append("heading not calibrated")
 
         parts.append("[Navigation] " + " | ".join(nav_parts))
 

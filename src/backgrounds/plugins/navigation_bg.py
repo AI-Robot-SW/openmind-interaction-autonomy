@@ -28,19 +28,15 @@ class NavigationBgConfig(BackgroundConfig):
         default=None,
         description="Maximum navigation speed in m/s (None uses DWA v_max)",
     )
-    calibrating_speed: float = Field(
-        default=0.5,
-        description="Fixed forward speed during heading calibration in m/s",
-    )
-
+    
 
 class NavigationBg(Background[NavigationBgConfig]):
     """
     Navigation Background.
 
-    Wraps NavigationProvider, which combines GnssRouteProvider and DwaRouteProvider.
-    GnssRouteProvider and DwaRouteProvider must already be running via their own backgrounds
-    (GnssRouteBg, DwaRouteProviderBg) before this background starts.
+    NavigationProvider만 생성·시작·종료한다.
+    KfPositionProvider, PathFollowProvider, DwaRouteProvider는
+    각자의 Background가 담당한다.
     """
 
     def __init__(self, config: NavigationBgConfig):
@@ -51,21 +47,23 @@ class NavigationBg(Background[NavigationBgConfig]):
             speed_step=self.config.speed_step,
             speed_min=self.config.speed_min,
             speed_max=self.config.speed_max,
-            calibrating_speed=self.config.calibrating_speed,
         )
         self.navigation_provider.start()
 
         logging.info(
-            "NavigationProvider initialized and started in background "
+            "NavigationBg started "
             f"(tick_dt={self.config.tick_dt}, speed_step={self.config.speed_step}, "
-            f"speed_min={self.config.speed_min}, speed_max={self.config.speed_max}, "
-            f"calibrating_speed={self.config.calibrating_speed})"
+            f"speed_min={self.config.speed_min}, speed_max={self.config.speed_max})"
         )
 
     def run(self) -> None:
-        evt = self._orchestrator_stop_event if self._orchestrator_stop_event is not None else threading.Event()
+        evt = (
+            self._orchestrator_stop_event
+            if self._orchestrator_stop_event is not None
+            else threading.Event()
+        )
         if evt.is_set():
             self.navigation_provider.stop()
-            logging.info("NavigationProvider stopped")
+            logging.info("NavigationBg stopped")
             return
         time.sleep(1.0)

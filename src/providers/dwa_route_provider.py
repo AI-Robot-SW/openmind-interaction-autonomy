@@ -13,7 +13,7 @@ from .singleton import singleton
 
 from .bev_occupancy_grid_provider import BEVOccupancyGridProvider
 from .distmap_provider import DistMapProvider
-from .gnss_route_provider import GnssRouteProvider
+from .path_follow_provider import PathFollowProvider
 
 
 @dataclass(frozen=True)
@@ -44,7 +44,7 @@ class DwaRouteProvider:
     Legacy DWACommandNode 로직을 Provider로 옮긴 버전.
 
     Inputs:
-      - GnssRouteProvider.data: dx,dy (+ heading_calibrated, reached_goal)
+      - PathFollowProvider.data: dx, dy (+ is_done) — 실내외 통합 경로 추종
       - BEVOccupancyGridProvider.data: BEVFrame
       - DistMapProvider.data: DistMapFrame
 
@@ -52,7 +52,7 @@ class DwaRouteProvider:
       - DwaRouteRecord (vx_cmd, vyaw_cmd, etc.)
 
     NOTE:
-      - GNSS의 vx/vyaw는 중복 제어 방지를 위해 소비하지 않음 (dx,dy만 입력으로 사용).
+      - PathFollowProvider의 vx_cmd는 중복 제어 방지를 위해 소비하지 않음 (dx, dy만 입력으로 사용).
       - BEV/DistMap provider lifecycle은 외부(backgrounds/tests)에서 관리한다.
       - _run()은 upstream provider가 이미 유효한 dataclass 데이터를 제공한다고 가정한다.
     """
@@ -87,7 +87,7 @@ class DwaRouteProvider:
         theta_turn_deg: float = 40.0,
         allow_backward: bool = False,
     ) -> None:
-        self._gnss = GnssRouteProvider()
+        self._route = PathFollowProvider()
         self._bev = BEVOccupancyGridProvider()
         self._dist = DistMapProvider()
 
@@ -172,29 +172,28 @@ class DwaRouteProvider:
             while self.running:
                 rec: DwaRouteRecord
 
-                # 1) GNSS goal
-                g = self._gnss.data
-                dx_in = float(g.dx)
-                dy_in = float(g.dy)
-                heading_ok = bool(g.heading_calibrated)
-                reached = bool(g.reached_goal)
-
-                if reached:
+                # 1) 경로 추종 goal
+                g = self._route.data
+                if g is None:
                     rec = DwaRouteRecord(
                             t_monotonic=time.monotonic(),
-                            mode="STOP",
-                            stop_reason="gnss_reached_goal",
+                            mode="IDLE",
+                            stop_reason="no_path",
                     )
                     with self._lock:
                         self._data = rec
                     time.sleep(0.1)
                     continue
 
-                if not heading_ok:
+                dx_in = float(g.dx)
+                dy_in = float(g.dy)
+                reached = bool(g.is_done)
+
+                if reached:
                     rec = DwaRouteRecord(
                             t_monotonic=time.monotonic(),
                             mode="STOP",
-                            stop_reason="gnss_heading_not_calibrated",
+                            stop_reason="reached_goal",
                     )
                     with self._lock:
                         self._data = rec

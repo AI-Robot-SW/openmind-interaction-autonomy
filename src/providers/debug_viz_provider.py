@@ -13,7 +13,7 @@ from .rtk_provider import RtkProvider
 from .uwb_provider import UwbProvider
 from .bev_occupancy_grid_provider import BEVOccupancyGridProvider
 from .dwa_route_provider import DwaRouteProvider
-from .gnss_route_provider import GnssRouteProvider
+from .path_follow_provider import PathFollowProvider
 from .navigation_provider import NavigationProvider
 from .realsense_camera_provider import RealSenseCameraProvider
 from .segmentation_provider import SegmentationProvider
@@ -149,7 +149,11 @@ class DebugVizProvider:
     @staticmethod
     def _put(img: np.ndarray, text: str, pos: tuple, color=(200, 200, 200),
              scale: float = 0.40, thick: int = 1) -> None:
-        cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
+        # cv2.putText 는 ASCII 만 지원 — non-ASCII 를 '?' 로 대체해 깨짐 방지
+        text = text.encode("ascii", "replace").decode("ascii")
+        # 검정 outline 먼저 → 밝은/어두운 배경 모두에서 가독성 보장
+        cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 2, cv2.LINE_AA)
+        cv2.putText(img, text, pos, cv2.FONT_HERSHEY_SIMPLEX, scale, color,     thick,     cv2.LINE_AA)
 
     def _title(self, img: np.ndarray, text: str, color=(200, 200, 200)) -> None:
         self._put(img, text, (4, 14), color)
@@ -179,7 +183,7 @@ class DebugVizProvider:
         p = cv2.resize(bev_frame.bev_image, (W, H))
         grid = bev_frame.occupancy_grid
         dwa_rec = DwaRouteProvider().data
-        gnss_rec = GnssRouteProvider().data
+        path_rec = PathFollowProvider().data
 
         if grid.resolution > 0:
             scale_x = W / grid.width
@@ -188,9 +192,9 @@ class DebugVizProvider:
             px_per_m_y = scale_y / grid.resolution
             rx, ry = W // 2, H - 1
 
-            if gnss_rec is not None:
-                gx = max(0, min(W - 1, int(rx - gnss_rec.dy * px_per_m_x)))
-                gy = max(0, min(H - 1, int(ry - gnss_rec.dx * px_per_m_y)))
+            if path_rec is not None:
+                gx = max(0, min(W - 1, int(rx - path_rec.dy * px_per_m_x)))
+                gy = max(0, min(H - 1, int(ry - path_rec.dx * px_per_m_y)))
                 cv2.line(p, (rx, ry), (gx, gy), (0, 160, 255), 2, cv2.LINE_AA)
 
             if dwa_rec is not None and dwa_rec.mode == "DWA":
@@ -233,7 +237,7 @@ class DebugVizProvider:
 
     def _panel_dwa_local(self, W: int, H: int) -> np.ndarray:
         dwa_rec = DwaRouteProvider().data
-        gnss_rec = GnssRouteProvider().data
+        path_rec = PathFollowProvider().data
 
         p = self._blank(W, H, (15, 15, 25))
         cx, cy = W // 2, H // 2
@@ -242,7 +246,7 @@ class DebugVizProvider:
         for dist_m in (1, 2, 3):
             r = dist_m * _DWA_M2PX
             cv2.circle(p, (cx, cy), r, AXIS, 1)
-            self._put(p, f"{dist_m}m",  (cx - r - 22, cy), color=AXIS, scale=0.30)
+            self._put(p, f"+{dist_m}m", (cx - r - 25, cy), color=AXIS, scale=0.30)
             self._put(p, f"-{dist_m}m", (cx + r + 2,  cy), color=AXIS, scale=0.30)
         cv2.line(p, (cx, 0), (cx, H), AXIS, 1)
         cv2.line(p, (0, cy), (W, cy), AXIS, 1)
@@ -251,9 +255,9 @@ class DebugVizProvider:
         body_color = _MODE_COLOR.get(mode, (120, 120, 120))
         cv2.circle(p, (cx, cy), 13, body_color, 2)
 
-        if gnss_rec is not None:
-            gx = int(cx - gnss_rec.dy * _DWA_M2PX)
-            gy = int(cy - gnss_rec.dx * _DWA_M2PX)
+        if path_rec is not None:
+            gx = int(cx - path_rec.dy * _DWA_M2PX)
+            gy = int(cy - path_rec.dx * _DWA_M2PX)
             cv2.arrowedLine(p, (cx, cy), (gx, gy), (0, 160, 255), 1, tipLength=0.25)
 
         if dwa_rec is not None:
@@ -273,9 +277,9 @@ class DebugVizProvider:
             ]
             if dwa_rec.stop_reason != "none":
                 lines.append((f"stop: {dwa_rec.stop_reason}", (80, 80, 220)))
-        if gnss_rec is not None:
+        if path_rec is not None:
             lines.append(
-                (f"gnss goal: ({gnss_rec.dx:+.2f}, {gnss_rec.dy:+.2f}) m", (80, 160, 255))
+                (f"path goal: ({path_rec.dx:+.2f}, {path_rec.dy:+.2f}) m", (80, 160, 255))
             )
 
         y_start = H - len(lines) * 14 - 4
@@ -292,7 +296,7 @@ class DebugVizProvider:
         nav_prov = NavigationProvider()
         rtk_rec = RtkProvider().data
         uwb_rec = UwbProvider().data
-        gnss_prov = GnssRouteProvider()
+        path_prov = PathFollowProvider()
 
         SECTION = (100, 200, 255)
         DIM = (80, 80, 80)
@@ -305,7 +309,7 @@ class DebugVizProvider:
         if nav_prov.running:
             try:
                 state = nav_prov.get_state()
-                goal = nav_prov.get_active_goal() or "—"
+                goal = nav_prov.get_active_goal() or "(none)"
                 dist = nav_prov.get_remaining_distance()
                 rows += [
                     (f" mode : {state.mode}", None),
@@ -325,17 +329,10 @@ class DebugVizProvider:
         rows.append(("", None))
 
         rows.append(("[ PATH ]", SECTION))
-        tracker = gnss_prov.tracker
-        if tracker is not None:
-            idx, total = tracker.progress
-            rows.append((f" node {idx} / {total}", None))
-            cur = tracker.current_node
-            if cur is not None:
-                node = cur.node
-                if hasattr(node, "lat") and node.lat is not None:
-                    rows.append((f" cur : {node.lat:.6f}, {node.lon:.6f}", None))
-                elif hasattr(node, "x") and node.x is not None:
-                    rows.append((f" cur : x={node.x:.2f} y={node.y:.2f} m", None))
+        path_status = path_prov.data
+        if path_status is not None:
+            rows.append((f" node {path_status.node_idx} / {path_status.node_total}", None))
+            rows.append((f" dx={path_status.dx:+.2f} dy={path_status.dy:+.2f} m", None))
         else:
             rows.append((" no active tracker", DIM))
 

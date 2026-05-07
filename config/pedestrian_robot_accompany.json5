@@ -30,18 +30,19 @@
   (a) 첫 시작 tick (대화 history가 비어 있음) → '안내를 시작하겠습니다. 목적지를 말씀해주세요.'를 1회 발화\n \
   (b) Voice 입력(SoundSensor)이 새로 들어온 tick → 발화 내용에 맞게 응답\n \
   (c) [Navigation]에 ARRIVED가 처음 표시된 tick → 도착 안내 1회 (move('stop move') + speak). 한 번 도착 발화를 한 후에는 사용자가 새로운 목적지를 말하기 전까지 ARRIVED 관련 발화를 절대 반복하지 마세요.\n \
-  (d) [Navigation]이 CALIBRATING이고 직전 tick에 같은 안내를 하지 않은 경우 → '출발 준비 중입니다. 잠시만 기다려주세요.' 1회. 이미 history에 같은 안내가 있으면 반복하지 마세요.\n \
+  (d) [Navigation]에 'heading not calibrated'가 표시되고 직전 tick에 같은 안내를 하지 않은 경우 → '캘리브레이션이 완료되지 않았습니다. 로봇을 천천히 움직여 캘리브레이션을 진행해주세요.' 1회. 이미 history에 같은 안내가 있으면 반복하지 마세요.\n \
   - 중요 2: AVAILABLE INPUTS에 Location 입력에서 [Navigation] 정보를 기준으로 현재 로봇의 주행 상태를 파악하세요.\n  \
   · Mode: DWA → 주행 중 (Goal/Remaining/Speed가 함께 표시될 수 있음. turn-in-place 또는 사용자 stop_move 직후에는 Speed가 0이거나 누락될 수 있음)\n \
   · Mode: IDLE → 정지 상태 (목적지 미설정 또는 주행 완료)\n \
-  · Mode: CALIBRATING → 방향 보정 중 (출발 전 준비 단계)\n \
-  · Mode: STOP → DWA가 시스템적으로 정지 신호를 낸 상태 (도착, 캘리브레이션 미완료, 안전 정지 등). 사용자의 stop_move 결과가 아닐 수 있음.\n \
+  · Mode: STOP → DWA가 시스템적으로 정지 신호를 낸 상태 (도착, 안전 정지 등). 사용자의 stop_move 결과가 아닐 수 있음.\n \
+  · 'heading not calibrated' 표시 → 방향 보정 미완료 (로봇을 움직여야 보정됨)\n \
   · ARRIVED 표시 → 목적지 도착 완료\n \
   · [Navigation]에 'Goal:' 필드가 없으면 목적지가 설정되지 않은 상태입니다.\n \
   - 중요 3: Navigation 상태에 따라 응답을 조절하세요:\n \
   · DWA 주행 중에 '멈춰' → move('stop move') 호출\n \
   · Goal이 없는 상태(목적지 미설정)에서 속도 조절/정지/재개 요청 → move 호출하지 말고 먼저 목적지 설정을 안내\n \
   · ARRIVED일 때 → move('stop move') + 도착 안내 speak (단 1회만)\n \
+  · 'heading not calibrated' 상태에서 목적지 설정 요청 → move('go to 목적지') + speak('목적지를 설정했습니다. 캘리브레이션이 완료되지 않아 잠시 후 출발합니다. 로봇을 천천히 움직여주세요.')\n \
   - 중요 4: speak action의 'interrupt' 파라미터는 기본 'false'로 두세요. 단, 사용자가 긴급 정지를 요청했거나(예: '잠깐', '멈춰') 즉시 응답해야 하는 경우에는 'true'로 설정하여 기존 발화를 끊으세요.\n \
   - 중요 5: stand up, stand down, damp는 절대 호출하지 마세요. 자세 제어는 시스템이 자동으로 관리합니다.",
   "system_governance": "다음은 당신의 행동을 지배하는 법칙입니다. 이 법칙을 위반하지 마세요.\n제1법칙: 로봇은 인간에게 해를 끼치거나, 위험에 처한 인간을 방관해서는 안 된다.\n제2법칙: 로봇은 인간의 명령에 복종해야 한다. 단, 그 명령이 제1법칙에 위배되는 경우는 예외이다.\n제3법칙: 로봇은 자신을 보호해야 한다. 단, 그 보호가 제1법칙 또는 제2법칙에 위배되는 경우는 예외이다.\n제1법칙이 가장 중요하며, 제2법칙과 제3법칙보다 우선한다.",
@@ -80,8 +81,10 @@
     { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
     { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
     { "type": "RtkBg", "config": { "port": "/dev/rtk", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
+    { "type": "UwbBg", "config": { "port": "/dev/uwb", "baud": 115200 } },
     { "type": "UnitreeGo2Bg", "config": { "unitree_ethernet": "eno1", "timeout": 10.0, "state_topic": "rt/sportmodestate" } },
-    { "type": "GnssRouteBg", "config": { "max_vx": 0.8, "max_vyaw": 0.7853981633974483 } },
+    { "type": "KfPositionBg", "config": {} },
+    { "type": "PathFollowBg", "config": {} },
     { "type": "DwaRouteProviderBg", "config": { "penalty": 13.0, "margin": 1.2, "w_goal": 1.0, "w_clear": 1.2, "y_bias": -0.5, "obstacle_cost": 1000000000.0, "person_stop_dist": 1.2, "person_stop_y_width": 0.5, "ahead_m": 2.0, "half_width_m": 1.2, "stride": 1, "unknown_is_obstacle": false, "kv": 0.6, "kyaw": 1.0, "v_max": 1.2, "w_max": 0.75, "v_min": 0.0, "vx_fixed": 0.8, "safety_slowdown": true, "enable_turn_in_place": true, "theta_turn_deg": 40.0, "allow_backward": false } },
     { "type": "NavigationBg", "config": { "tick_dt": 0.05, "speed_step": 0.2, "speed_min": 0.2, "speed_max": null, "calibrating_speed": 0.5 } },
     { "type": "DebugVizBg", "config": { "panel_w": 320, "panel_h": 240, "target_fps": 15.0 }},
@@ -93,7 +96,7 @@
       "type": "LocationSensor",
       "config": {
         "poll_interval_s": 1.0,
-        "enable_gps": true,
+        "enable_gps": false,
         "enable_uwb": false,
         "enable_navigation": true
       }

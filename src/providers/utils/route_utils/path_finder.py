@@ -8,7 +8,7 @@ from typing import Optional
 from .graph_loader import GraphLoader
 from .graph_model import Graph, Node, NodeRef
 
-from ...geo_utils import euclidean_dist, haversine_dist_m
+from ..geo_utils import euclidean_dist_m, haversine_dist_m
 
 # 그래프 경계 횡단 비용 (meters 단위 거리와 동일한 스케일)
 # 실내/실외 전환, 계단 등에 부여할 패널티를 타입별로 정의
@@ -29,7 +29,7 @@ def _edge_weight(graph: Graph, a: Node, b: Node) -> float:
     else:
         assert a.x is not None and a.y is not None
         assert b.x is not None and b.y is not None
-        return euclidean_dist(a.x, a.y, b.x, b.y)
+        return euclidean_dist_m(a.x, a.y, b.x, b.y)
 
 
 def _build_transition_index(
@@ -71,23 +71,25 @@ class PathFinder:
     """
 
     def __init__(self) -> None:
-        manifest_path = os.path.join(os.path.dirname(__file__), "..", "graphs", "manifest.json")
+        manifest_path = os.path.join(os.path.dirname(__file__), "graphs", "manifest.json")
         self._loader = GraphLoader(manifest_path, max_cache_size=5)
         self._conn_index = _build_transition_index(self._loader)
 
-    def find_path(self, start: NodeRef, end: NodeRef) -> Optional[list[NodeRef]]:
+    def find_path(self, start: NodeRef, end: NodeRef) -> Optional[list[list[NodeRef]]]:
         """
-        start에서 end까지 최단 경로를 반환한다.
+        start에서 end까지 최단 경로를 coordinate_frame 별로 분리해 반환한다.
 
         Args:
             start: (graph_id, node_id) 출발 노드
             end:   (graph_id, node_id) 도착 노드
 
         Returns:
-            NodeRef 리스트(출발~도착 포함), 경로 없으면 None
+            coordinate_frame이 같은 NodeRef 묶음의 리스트 (segment 단위).
+            예: [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
+            경로 없으면 None
         """
         if start == end:
-            return [start]
+            return [[start]]
 
         dist: dict[NodeRef, float] = {start: 0.0}
         prev: dict[NodeRef, Optional[NodeRef]] = {start: None}
@@ -102,7 +104,7 @@ class PathFinder:
                 continue
 
             if cur == end:
-                return _reconstruct(prev, end)
+                return self._split_by_frame(_reconstruct(prev, end), self._loader)
 
             graph = self._loader.get_graph(graph_id)
             node = graph.nodes.get(node_id)
@@ -146,7 +148,7 @@ class PathFinder:
         graph = self._loader.get_graph(graph_id)
         best = min(
             graph.nodes.values(),
-            key=lambda n: euclidean_dist(x, y, n.x, n.y),
+            key=lambda n: euclidean_dist_m(x, y, n.x, n.y),
         )
         return (graph_id, best.id)
 
@@ -158,3 +160,30 @@ class PathFinder:
                 place = graph.places[place_id]
                 return (graph_id, place.node_id)
         raise KeyError(f"Place '{place_id}' not found in any registered graph")
+
+    @staticmethod
+    def _split_by_frame(path: list[NodeRef], loader: GraphLoader) -> list[list[NodeRef]]:
+        """
+        NodeRef 리스트를 coordinate_frame이 바뀌는 경계에서 분리한다.
+
+        예: [outdoor_1, outdoor_2, indoor_1, indoor_2]
+            → [[outdoor_1, outdoor_2], [indoor_1, indoor_2]]
+        """
+        if not path:
+            return []
+
+        segments: list[list[NodeRef]] = []
+        current_segment: list[NodeRef] = [path[0]]
+        current_frame = loader.get_graph(path[0][0]).coordinate_frame
+
+        for ref in path[1:]:
+            frame = loader.get_graph(ref[0]).coordinate_frame
+            if frame != current_frame:
+                segments.append(current_segment)
+                current_segment = [ref]
+                current_frame = frame
+            else:
+                current_segment.append(ref)
+
+        segments.append(current_segment)
+        return segments

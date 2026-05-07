@@ -23,6 +23,14 @@ class UwbPosRecord:
 
 @singleton
 class UwbProvider:
+    @staticmethod
+    def _make_empty_record() -> UwbPosRecord:
+        return UwbPosRecord(
+            t_monotonic=time.monotonic(),
+            x_m=None,y_m=None, z_m=None,
+            quality_factor=None
+        )
+
     def __init__(
         self,
         port: str = "/dev/uwb",
@@ -33,14 +41,13 @@ class UwbProvider:
         self.ser: Optional[serial.Serial] = None
 
         self._write_lock = threading.RLock()
-        self._data: Optional[UwbPosRecord] = None
+        self._data: UwbPosRecord = self._make_empty_record()
         self._lock = threading.Lock()
 
         self.running = False
         self._thread: Optional[threading.Thread] = None
 
-        self._last_dist_monotonic: Optional[float] = None
-        self._last_pos_monotonic: Optional[float] = None
+
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -49,9 +56,8 @@ class UwbProvider:
 
         self.ser = serial.Serial(self._port, self._baud, timeout=0.2)
 
-        self._data = None
-        self._last_dist_monotonic = None
-        self._last_pos_monotonic = None
+        with self._lock:
+            self._data = self._make_empty_record()
 
         try:
             self._cfg_interface()
@@ -149,10 +155,29 @@ class UwbProvider:
 
         self._enter_shell()
 
+        # lec is a toggle. Send lec and wait for confirmation:
+        # - DIST arrives → anchors visible, streaming active
+        # - dwm> prompt returns → no anchors yet, but lec was accepted (streaming will
+        #   start automatically once anchors come into range)
+        buf = bytearray()
         with self._write_lock:
             self.ser.reset_input_buffer()
             self.ser.write(b"lec\r")
             self.ser.flush()
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            chunk = self._read_some()
+            if chunk:
+                buf.extend(chunk)
+                if b"DIST" in buf:
+                    return
+                if b"dwm>" in buf:
+                    logging.debug("UwbProvider: lec accepted, no anchors in range yet")
+                    return
+            time.sleep(0.05)
+
+        raise RuntimeError("UwbProvider: failed to start lec streaming")
     
     def _read_some(self) -> bytes:
         n = int(getattr(self.ser, "in_waiting", 0) or 0)
@@ -187,10 +212,10 @@ class UwbProvider:
             return None
 
         try:
-            x_m = float(parts[1])
-            y_m = float(parts[2])
-            z_m = float(parts[3])
-            quality_factor = int(float(parts[4]))
+            x_m = float(parts[1].decode())
+            y_m = float(parts[2].decode())
+            z_m = float(parts[3].decode())
+            quality_factor = int(float(parts[4].decode()))
         except Exception:
             return None
 
@@ -203,11 +228,11 @@ class UwbProvider:
         )
     
     @property
-    def data(self) -> Optional[UwbPosRecord]:
-        """최신 UwbPosRecord. 데이터 수신 전에는 None."""
+    def data(self) -> UwbPosRecord:
+        """최신 UwbPosRecord. x_m/y_m/quality_factor 가 None이면 포지션 미수신."""
         with self._lock:
             return self._data
-        
+
     def _run(self) -> None:
         buf = bytearray()
 
@@ -220,13 +245,8 @@ class UwbProvider:
 
             buf.extend(chunk)
             for line in self._extract_lines(buf):
-                now = time.monotonic()
-
-                if line.startswith(b"DIST,"):
-                    self._last_dist_monotonic = now
-
                 rec = self._parse_pos_line(line)
-                if rec is not None:
-                    with self._lock:
-                        self._data = rec
-                    self._last_pos_monotonic = rec.t_monotonic
+                if rec is None:
+                    rec = self._make_empty_record()
+                with self._lock:
+                    self._data = rec

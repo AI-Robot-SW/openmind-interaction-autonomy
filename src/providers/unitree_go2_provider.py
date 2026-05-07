@@ -87,7 +87,7 @@ class UnitreeGo2Provider:
 
     def __init__(
         self, 
-        channel: str = "", 
+        channel: str = "eno1", 
         timeout: float = 10.0,
         state_topic: str = "rt/sportmodestate"
     ) -> None:
