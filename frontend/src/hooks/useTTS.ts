@@ -36,7 +36,7 @@ export function useTTS() {
             console.warn("[useTTS] Missing `state` in WS message; defaulting to `idle`.", msg);
           }
           setTTSState({
-            displayText: msg.text?.trim() ?? "",
+            text: msg.text ?? "",
             state: nextState ?? "idle",
             speakerPlaying: Boolean(speakerPlaying),
           });
