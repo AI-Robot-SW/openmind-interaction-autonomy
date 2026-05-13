@@ -259,6 +259,11 @@ class NavigationProvider:
         st = self.get_state()
         if not self.running:
             return None
+        try:
+            remaining_distance_m = self.get_remaining_distance()
+        except Exception:
+            logger.exception("NavigationProvider.data: failed to compute remaining distance")
+            remaining_distance_m = 0.0
         return {
             "t_monotonic": st.t_monotonic,
             "vx": st.vx,
@@ -267,6 +272,9 @@ class NavigationProvider:
             "mode": st.mode,
             "heading_calibrated": st.heading_calibrated,
             "reached_goal": st.reached_goal,
+            "active_goal": self.get_active_goal(),
+            "target_speed": self.get_target_speed(),
+            "remaining_distance_m": remaining_distance_m,
         }
 
     # ---------------- helpers ----------------

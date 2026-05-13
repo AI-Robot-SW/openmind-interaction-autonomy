@@ -26,7 +26,7 @@ from providers.io_provider import IOProvider
 from providers.stt_provider import STTProvider
 
 # 목적지 키워드 — 매칭 시 IOProvider에 저장하여 모드 전환 후에도 기억
-_DESTINATION_KEYWORDS = ["L1", "L2", "L3", "북문"]
+_DESTINATION_KEYWORDS = ["L1", "L2", "L3", "북문","본관"]
 # 도착 키워드 — 매칭 시 저장된 목적지 초기화
 _ARRIVAL_KEYWORDS = ["도착", "arrived"]
 
@@ -42,6 +42,10 @@ class SoundSensorConfig(SensorConfig):
     """
 
     language: str = Field(default="korean", description="음성 인식 언어")
+    dedupe_window_s: float = Field(
+        default=2.0,
+        description="동일 STT 최종 결과를 중복으로 간주할 시간 창 (초)",
+    )
 
 
 class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
@@ -70,6 +74,8 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
         # 메시지 버퍼
         self.message_buffer: Queue[str] = Queue()
         self.messages: list[Message] = []
+        self._last_stt_text: Optional[str] = None
+        self._last_stt_time: float = 0.0
 
         # IOProvider 싱글턴 — 모드 전환 입력 전달용 + Fuser 입력 기록용
         self.io_provider = IOProvider()
@@ -91,6 +97,18 @@ class SoundSensor(FuserInput[SoundSensorConfig, Optional[str]]):
     def _handle_stt_result(self, text: str) -> None:
         """STT 결과 콜백 핸들러."""
         if text and len(text.strip()) > 0:
+            now = time.time()
+            normalized_text = " ".join(text.strip().split())
+            if (
+                self._last_stt_text == normalized_text
+                and now - self._last_stt_time < self.config.dedupe_window_s
+            ):
+                logging.debug("Duplicate STT result ignored: %s", text)
+                return
+
+            self._last_stt_text = normalized_text
+            self._last_stt_time = now
+
             self.message_buffer.put(text)
             self.io_provider.add_mode_transition_input(text)
 
