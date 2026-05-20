@@ -57,11 +57,23 @@ class RealSenseCameraProvider:
         width: int = 640,
         height: int = 480,
         fps: int = 30,
+        enable_depth_filters: bool = True,
+        spatial_filter_magnitude: int = 2,
+        spatial_filter_smooth_alpha: float = 0.5,
+        spatial_filter_smooth_delta: float = 20.0,
+        temporal_filter_smooth_alpha: float = 0.4,
+        temporal_filter_smooth_delta: float = 20.0,
     ):
         self.camera_index = int(camera_index)
         self.width = int(width)
         self.height = int(height)
         self.fps = int(fps)
+        self.enable_depth_filters = bool(enable_depth_filters)
+        self.spatial_filter_magnitude = int(spatial_filter_magnitude)
+        self.spatial_filter_smooth_alpha = float(spatial_filter_smooth_alpha)
+        self.spatial_filter_smooth_delta = float(spatial_filter_smooth_delta)
+        self.temporal_filter_smooth_alpha = float(temporal_filter_smooth_alpha)
+        self.temporal_filter_smooth_delta = float(temporal_filter_smooth_delta)
 
         self._data: Optional[CameraFrame] = None
         self._lock = threading.Lock()
@@ -76,6 +88,7 @@ class RealSenseCameraProvider:
         self._depth_scale: Optional[float] = None
         self._intrinsics_cache: Optional[CameraIntrinsics] = None
         self._frame_cnt: int = 0
+        self._rs_filters: list = []
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -147,6 +160,19 @@ class RealSenseCameraProvider:
         
         self._align = rs.align(rs.stream.color)
 
+        if self.enable_depth_filters:
+            spatial = rs.spatial_filter()
+            spatial.set_option(rs.option.filter_magnitude, self.spatial_filter_magnitude)
+            spatial.set_option(rs.option.filter_smooth_alpha, self.spatial_filter_smooth_alpha)
+            spatial.set_option(rs.option.filter_smooth_delta, self.spatial_filter_smooth_delta)
+
+            temporal = rs.temporal_filter()
+            temporal.set_option(rs.option.filter_smooth_alpha, self.temporal_filter_smooth_alpha)
+            temporal.set_option(rs.option.filter_smooth_delta, self.temporal_filter_smooth_delta)
+
+            self._rs_filters = [spatial, temporal]
+            logging.info("RealSenseCameraProvider: depth filters enabled (spatial + temporal)")
+
         # warm-up: auto-exposure 안정화
         for _ in range(10):
             self._pipeline.wait_for_frames()
@@ -159,6 +185,7 @@ class RealSenseCameraProvider:
         self._depth_scale = None
         self._intrinsics_cache = None
         self._frame_cnt = 0
+        self._rs_filters = []
 
     def _read_frame(self) -> CameraFrame:
         if self._pipeline is None:
@@ -173,6 +200,9 @@ class RealSenseCameraProvider:
         depth_frame = frames.get_depth_frame()
         if not color_frame or not depth_frame:
             raise RuntimeError("Color or depth frame missing")
+
+        for f in self._rs_filters:
+            depth_frame = f.process(depth_frame)
 
         bgr: np.ndarray = np.asanyarray(color_frame.get_data()).copy()
 

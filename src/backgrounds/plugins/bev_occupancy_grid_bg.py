@@ -16,16 +16,16 @@ class BEVOccupancyGridConfig(BackgroundConfig):
         default=0.05, description="Resolution of the grid in meters per pixel"
     )
     width: Optional[int] = Field(
-        default=50, description="Width of the grid in pixels"
+        default=140, description="Width of the grid in pixels"
     )
     height: Optional[int] = Field(
-        default=60, description="Height of the grid in pixels"
+        default=120, description="Height of the grid in pixels"
     )
     origin_x: Optional[float] = Field(
-        default=0.0, description="X origin of the grid in meters"
+        default=-0.5, description="X origin of the grid in meters"
     )
     origin_y: Optional[float] = Field(
-        default=-1.5, description="Y origin of the grid in meters"
+        default=-3.0, description="Y origin of the grid in meters"
     )
     dx: Optional[float] = Field(
         default=-0.34, description="X offset for coordinate transformation"
@@ -34,7 +34,13 @@ class BEVOccupancyGridConfig(BackgroundConfig):
         default=0.0, description="Y offset for coordinate transformation"
     )
     closing_kernel_size: Optional[int] = Field(
-        default=1, description="Size of morphological closing kernel"
+        default=3, description="Size of morphological closing kernel"
+    )
+    camera_height_m: float = Field(
+        default=0.413, description="Camera optical center height above ground (meters)"
+    )
+    ground_projection_stride: int = Field(
+        default=4, description="Pixel stride for driveable ground-plane projection"
     )
 
 
@@ -49,13 +55,13 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
         super().__init__(config)
 
         res = self.config.res or 0.05
-        width = self.config.width or 50
-        height = self.config.height or 60
-        origin_x = self.config.origin_x or 0.0
-        origin_y = self.config.origin_y or -1.5
-        dx = self.config.dx or -0.34
-        dy = self.config.dy or 0.0
-        closing_kernel_size = self.config.closing_kernel_size or 1
+        width = self.config.width or 140
+        height = self.config.height or 120
+        origin_x = self.config.origin_x if self.config.origin_x is not None else -0.5
+        origin_y = self.config.origin_y if self.config.origin_y is not None else -3.0
+        dx = self.config.dx if self.config.dx is not None else -0.34
+        dy = self.config.dy if self.config.dy is not None else 0.0
+        closing_kernel_size = self.config.closing_kernel_size or 3
 
         # Initialize Provider (singleton, so same instance shared)
         self.bev_occupancy_grid_provider = BEVOccupancyGridProvider(
@@ -67,6 +73,8 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
             dx=dx,
             dy=dy,
             closing_kernel_size=closing_kernel_size,
+            camera_height_m=self.config.camera_height_m,
+            ground_projection_stride=self.config.ground_projection_stride,
         )
 
         # Start Provider
@@ -75,7 +83,7 @@ class BEVOccupancyGridBg(Background[BEVOccupancyGridConfig]):
         logging.info(
             f"BEV Occupancy Grid Provider initialized in background "
             f"(res: {res}, size: ({width},{height}), origin: ({origin_x},{origin_y}), "
-            f"dx: {dx}, dy: {dy})"
+            f"dx: {dx}, dy: {dy}, camera_height_m: {self.config.camera_height_m})"
         )
 
     def run(self) -> None:

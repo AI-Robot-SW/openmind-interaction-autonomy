@@ -31,12 +31,19 @@ class PointCloudFrame:
     """
     t_monotonic    : 원본 CameraFrame의 t_monotonic (동기화 기준)
     points         : (N, 4) float32 — X, Y, Z, RGB-packed-as-float
+    semantic_map   : (H, W) uint8 — segmentation class map (stride 적용 해상도)
+    fx, fy, cx, cy : semantic_map 해상도 기준 intrinsics
     latency_s      : pointcloud 처리 시간 (초)
     pointcloud_fps : 1 / latency_s
     frame_cnt      : 대응하는 CameraFrame.frame_cnt — 동기화 기준
     """
     t_monotonic:    float
     points:         np.ndarray
+    semantic_map:   np.ndarray
+    fx:             float
+    fy:             float
+    cx:             float
+    cy:             float
     latency_s:      float
     pointcloud_fps: float
     frame_cnt:      int
@@ -113,27 +120,51 @@ class PointCloudProvider:
             
         logging.info("PointCloudProvider stopped")
 
-
     def _process_frame(self, cam_frame: CameraFrame, seg_frame) -> PointCloudFrame:
-        t0     = time.monotonic()
+        t0 = time.monotonic()
         stride = max(1, self.stride)
-        depth  = cam_frame.depth[::stride, ::stride]
-        color  = _SEMANTIC_COLORS[seg_frame.semantic_map][::stride, ::stride]
-        intr   = cam_frame.intrinsics
+
+        depth = cam_frame.depth[::stride, ::stride]
+        semantic_map = seg_frame.semantic_map[::stride, ::stride]
+        color = _SEMANTIC_COLORS[semantic_map]
+        intr = cam_frame.intrinsics
+
+        scaled_fx = intr.fx / stride
+        scaled_fy = intr.fy / stride
+        scaled_cx = intr.cx / stride
+        scaled_cy = intr.cy / stride
 
         flat = self._gpu_worker.submit(
-            lambda: self._kernel.run(depth, color, intr.fx, intr.fy, intr.cx, intr.cy, self.range_max)
+            lambda: self._kernel.run(
+                depth,
+                color,
+                scaled_fx,
+                scaled_fy,
+                scaled_cx,
+                scaled_cy,
+                self.range_max,
+            )
         ).result()
 
         if self.range_max is not None:
-            mask = (flat[:, 2] > 0.0) & (flat[:, 2] <= self.range_max) & np.isfinite(flat[:, 2])
+            mask = (
+                (flat[:, 2] > 0.0)
+                & (flat[:, 2] <= self.range_max)
+                & np.isfinite(flat[:, 2])
+            )
         else:
             mask = (flat[:, 2] > 0.0) & np.isfinite(flat[:, 2])
 
         latency_s = float(time.monotonic() - t0)
+
         return PointCloudFrame(
             t_monotonic=float(cam_frame.t_monotonic),
             points=flat[mask],
+            semantic_map=semantic_map.astype(np.uint8, copy=False),
+            fx=float(scaled_fx),
+            fy=float(scaled_fy),
+            cx=float(scaled_cx),
+            cy=float(scaled_cy),
             latency_s=latency_s,
             pointcloud_fps=1.0 / latency_s if latency_s > 0 else 0.0,
             frame_cnt=cam_frame.frame_cnt,

@@ -1,6 +1,5 @@
 # bev_occupancy_grid_provider.py
 
-import cv2
 import time
 import logging
 import threading
@@ -24,7 +23,7 @@ class OccupancyGrid:
     height     : (pixels)
     origin_x   : (meters)
     origin_y   : (meters)
-    data       : (height, width) int8 — 0=free, 70=avoid, 88=person, 100=occupied/unknown
+    data       : (height, width) int8 — -1=unknown, 0=free, 70=avoid, 80=curb, 88=person
     """
     resolution: float
     width:      int
@@ -57,33 +56,37 @@ class BEVOccupancyGridProvider:
     """
     background thread에서 PointCloudFrame을 읽어 CUDA 커널로
     BEV 이미지와 occupancy grid를 생성하고 최신 결과를 data 프로퍼티로 노출.
-    GPU 연산은 GPUWorker를 통해 실행
+    전체 파이프라인 (pc→grid, ground projection, ray cast, morphology) 이
+    단일 BEVKernel 안에서 GPU로 처리된다.
     """
 
     def __init__(
         self,
         res: float = 0.05,
-        width: int = 50,
-        height: int = 60,
-        origin_x: float = 0.0,
-        origin_y: float = -1.5,
+        width: int = 140,
+        height: int = 120,
+        origin_x: float = -0.5,
+        origin_y: float = -3.0,
         dx: float = -0.34,
         dy: float = 0.0,
-        closing_kernel_size: int = 1,
+        closing_kernel_size: int = 3,
+        camera_height_m: float = 0.413,
+        ground_projection_stride: int = 4,
     ):
-        self.res = res
-        self.width = width
-        self.height = height
+        self.res      = res
+        self.width    = width
+        self.height   = height
         self.origin_x = origin_x
         self.origin_y = origin_y
-        self.dx = dx
-        self.dy = dy
-        self.closing_kernel_size = closing_kernel_size
+        self.dx       = dx
+        self.dy       = dy
+        self.camera_height_m          = float(camera_height_m)
+        self.ground_projection_stride = max(1, int(ground_projection_stride))
 
         self.pointcloud_provider = PointCloudProvider()
 
-        self._gpu_worker: Optional[GPUWorker] = None
-        self._kernel: Optional[BEVKernel] = None
+        self._gpu_worker:       Optional[GPUWorker]         = None
+        self._pipeline_kernel:  Optional[BEVKernel] = None
 
         self._data: Optional[BEVFrame] = None
         self._lock = threading.Lock()
@@ -93,31 +96,40 @@ class BEVOccupancyGridProvider:
 
         # 매 프레임 사용되는 상수 사전 계산
         self._grid_shape = (self.height, self.width)
-        self._inv_res = 1.0 / self.res
-        self._grid_x_offset = self.dx - self.origin_x
-        self._grid_y_offset = self.dy - self.origin_y
-        self._apply_closing = self.closing_kernel_size > 1
-        self._closing_kernel = (
-            np.ones((closing_kernel_size, closing_kernel_size), dtype=np.uint8)
-            if self._apply_closing
-            else None
-        )
-
-        self._last_cnt: int = -1
+        self._inv_res    = 1.0 / self.res
+        self._last_cnt:  int = -1
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             logging.warning("BEVOccupancyGridProvider already running")
             return
 
+        inv_res   = self._inv_res
+        sensor_i  = int(np.clip(round((self.dy - self.origin_y) * inv_res), 0, self.height - 1))
+        sensor_j  = int(np.clip(round((self.dx - self.origin_x) * inv_res), 0, self.width  - 1))
+
         self._gpu_worker = GPUWorker()
-        self._kernel = self._gpu_worker.submit(lambda: BEVKernel(self.width, self.height)).result()
+        self._pipeline_kernel = self._gpu_worker.submit(
+            lambda: BEVKernel(
+                width=self.width,
+                height=self.height,
+                origin_x=self.origin_x,
+                origin_y=self.origin_y,
+                dx=self.dx,
+                dy=self.dy,
+                inv_res=inv_res,
+                camera_height_m=self.camera_height_m,
+                ground_projection_stride=self.ground_projection_stride,
+                sensor_i=sensor_i,
+                sensor_j=sensor_j,
+            )
+        ).result()
 
         self.running = True
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-        # 첫 프레임 도착까지 대기 — 반환 후 data가 항상 BEVFrame을 보장
+        # 첫 프레임 도착까지 대기
         deadline = time.monotonic() + 10.0
         while time.monotonic() < deadline:
             with self._lock:
@@ -136,9 +148,13 @@ class BEVOccupancyGridProvider:
             self._thread.join(timeout=2.0)
         self._thread = None
 
-        if self._kernel is not None:
-            self._gpu_worker.submit(self._kernel.free).result()
-            self._kernel = None
+        if self._pipeline_kernel is not None:
+            self._gpu_worker.submit(self._pipeline_kernel.free).result()
+            self._pipeline_kernel = None
+
+        if self._gpu_worker is not None:
+            self._gpu_worker.stop()
+            self._gpu_worker = None
 
         self._last_cnt = -1
         with self._lock:
@@ -146,17 +162,18 @@ class BEVOccupancyGridProvider:
 
         logging.info("BEVOccupancyGridProvider stopped")
 
+    # ─────────────────────────────────────────────────────────────────────────
+
     def _process_frame(self, pc_frame) -> Optional[BEVFrame]:
-        # BEV 이미지: GPU thread 실행 / occupancy grid: CPU numpy
         t0 = time.monotonic()
-        
-        bev = self._gpu_worker.submit(
-            lambda: self._kernel.run(pc_frame.points, self.res)
-        ).result()
 
-        occ = self._build_occupancy_grid(pc_frame.points)
+        occ = self._build_occupancy_grid(pc_frame)
+        if occ is None:
+            return None
 
+        bev       = self._render_occupancy_grid_debug_image(occ.data)
         latency_s = float(time.monotonic() - t0)
+
         return BEVFrame(
             t_monotonic=float(pc_frame.t_monotonic),
             bev_image=bev,
@@ -166,53 +183,30 @@ class BEVOccupancyGridProvider:
             frame_cnt=pc_frame.frame_cnt,
         )
 
-    def _build_occupancy_grid(self, points: np.ndarray) -> Optional[OccupancyGrid]:
-        # points (N, 4) float32 → OccupancyGrid (nav_msgs/OccupancyGrid 호환)
+    def _build_occupancy_grid(self, pc_frame) -> Optional[OccupancyGrid]:
         try:
-            x = points[:, 0]
-            z = points[:, 2]
-            rgb_int = points[:, 3].view(np.uint32)
-            r = ((rgb_int >> 16) & 0xFF).astype(np.uint8)
-            g = ((rgb_int >>  8) & 0xFF).astype(np.uint8)
-            b = ( rgb_int        & 0xFF).astype(np.uint8)
-
-            grid_np = np.full(self._grid_shape, 100, dtype=np.int8)
-
-            # 좌표 변환: 카메라 x/z → 그리드 행/열 인덱스
-            j_grid = ((z + self._grid_x_offset) * self._inv_res).astype(np.int32)
-            i_grid = ((-x + self._grid_y_offset) * self._inv_res).astype(np.int32)
-
-            valid = (
-                (i_grid >= 0)
-                & (i_grid < self.height)
-                & (j_grid >= 0)
-                & (j_grid < self.width)
-            )
-
-            if np.any(valid):
-                valid_i = i_grid[valid]
-                valid_j = j_grid[valid]
-                valid_r = r[valid]
-                valid_g = g[valid]
-                valid_b = b[valid]
-
-                mask_person = (valid_b > 100) & (valid_r < 80) & (valid_g < 80)
-                mask_avoid  = (valid_r > 200) & (valid_g > 200) & (valid_b > 200)
-                mask_free   = (valid_g > 100) & (valid_r < 80)  & (valid_b < 80)
-
-                grid_np[valid_i[mask_person], valid_j[mask_person]] = 88
-                grid_np[valid_i[mask_avoid],  valid_j[mask_avoid]]  = 70
-                grid_np[valid_i[mask_free],   valid_j[mask_free]]   = 0
-
-            if self._apply_closing and self._closing_kernel is not None:
-                occ_mask = (grid_np == 100).astype(np.uint8)
-                occ_mask = cv2.morphologyEx(
-                    occ_mask,
-                    cv2.MORPH_CLOSE,
-                    self._closing_kernel,
-                    iterations=3,
+            points = pc_frame.points
+            if points is None or len(points) == 0:
+                grid_np = np.full(self._grid_shape, -1, dtype=np.int8)
+                return OccupancyGrid(
+                    resolution=self.res,
+                    width=self.width,
+                    height=self.height,
+                    origin_x=self.origin_x,
+                    origin_y=self.origin_y,
+                    data=grid_np,
                 )
-                grid_np[occ_mask > 0] = 100
+
+            _pts = np.ascontiguousarray(points, dtype=np.float32)
+            _sem = pc_frame.semantic_map
+            _fx  = float(pc_frame.fx)
+            _fy  = float(pc_frame.fy)
+            _cx  = float(pc_frame.cx)
+            _cy  = float(pc_frame.cy)
+
+            grid_np = self._gpu_worker.submit(
+                lambda: self._pipeline_kernel.run(_pts, _sem, _fx, _fy, _cx, _cy)
+            ).result()
 
             return OccupancyGrid(
                 resolution=self.res,
@@ -222,17 +216,34 @@ class BEVOccupancyGridProvider:
                 origin_y=self.origin_y,
                 data=grid_np,
             )
+
         except Exception as e:
             logging.error(f"BEVOccupancyGridProvider: occupancy grid build failed: {e}")
             return None
 
+    def _render_occupancy_grid_debug_image(self, grid_np: np.ndarray) -> np.ndarray:
+        display_grid = np.flipud(np.fliplr(grid_np.T))
+
+        image = np.zeros(
+            (display_grid.shape[0], display_grid.shape[1], 3),
+            dtype=np.uint8,
+        )
+        image[display_grid == -1] = ( 40,  40,  40)   # unknown: dark gray
+        image[display_grid ==  0] = (  0, 255,   0)   # free: green
+        image[display_grid == 70] = (  0,   0, 255)   # avoid: red
+        image[display_grid == 80] = (  0, 165, 255)   # curb: orange
+        image[display_grid == 88] = (255,   0,   0)   # person: blue
+
+        return image
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     @property
     def data(self) -> Optional[BEVFrame]:
         """최신 BEVFrame. 첫 프레임 처리 전에는 None."""
         with self._lock:
             return self._data
-        
+
     def _run(self) -> None:
         while self.running:
             try:

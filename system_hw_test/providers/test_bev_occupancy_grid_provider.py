@@ -37,13 +37,14 @@ from providers.bev_occupancy_grid_provider import BEVOccupancyGridProvider
 # ── 시각화 헬퍼 ───────────────────────────────────────────────────────────────
 
 def occupancy_to_bgr(grid: np.ndarray) -> np.ndarray:
-    """Occupancy grid values → BGR visualization."""
-    lut = np.zeros((101, 3), dtype=np.uint8)
-    lut[0] = (0, 255, 0)       # free
-    lut[70] = (255, 255, 255)  # avoid
-    lut[88] = (255, 0, 0)      # person
-    lut[100] = (0, 0, 255)     # occupied / unknown
-    return lut[np.clip(grid.astype(np.int16), 0, 100)]
+    """Occupancy grid values → BGR visualization.
+    -1=unknown(dark gray), 0=free(green), 70=avoid/curb(red), 88=person(blue)
+    """
+    img = np.full((*grid.shape, 3), (40, 40, 40), dtype=np.uint8)
+    img[grid ==  0] = (0,   255,   0)
+    img[grid == 70] = (0,     0, 255)
+    img[grid == 88] = (255,   0,   0)
+    return img
 
 
 def draw_panel(data: dict, scale: int = 8) -> np.ndarray:
@@ -151,7 +152,7 @@ def main() -> int:
     print(f"  bev FPS         : {frame.bev_fps:.1f}")
     print(f"  frame_cnt       : {frame.frame_cnt}")
 
-    if bev_img.shape != (bev_provider.height, bev_provider.width, 3):
+    if bev_img.shape != (bev_provider.width, bev_provider.height, 3):
         print(f"  FAIL: bev_image shape mismatch: {bev_img.shape}")
         return 1
 
@@ -159,7 +160,7 @@ def main() -> int:
         print(f"  FAIL: occupancy shape mismatch: {occ_data.shape}")
         return 1
 
-    valid_values = np.isin(occ_data, [0, 70, 88, 100]).all()
+    valid_values = np.isin(occ_data, [-1, 0, 70, 88]).all()
     if not valid_values:
         print(f"  FAIL: unexpected occupancy values: {np.unique(occ_data)}")
         return 1

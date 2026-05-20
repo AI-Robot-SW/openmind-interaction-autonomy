@@ -152,6 +152,24 @@ def main() -> int:
     if len(frame.points) == 0:
         print("  WARN: point count가 0 — range_max 또는 depth 확인 필요")
 
+    # PointCloudFrame 확장 필드 검증 (semantic_map, intrinsics)
+    print(f"  semantic_map : {frame.semantic_map.shape}  dtype={frame.semantic_map.dtype}")
+    print(f"  fx={frame.fx:.2f}  fy={frame.fy:.2f}  cx={frame.cx:.2f}  cy={frame.cy:.2f}")
+
+    if frame.semantic_map.ndim != 2:
+        print(f"  FAIL: semantic_map이 2D가 아님: {frame.semantic_map.shape}")
+        pc_provider.stop()
+        seg_provider.stop()
+        camera_provider.stop()
+        return 1
+
+    if frame.fx <= 0 or frame.fy <= 0:
+        print(f"  FAIL: intrinsics가 0 이하: fx={frame.fx} fy={frame.fy}")
+        pc_provider.stop()
+        seg_provider.stop()
+        camera_provider.stop()
+        return 1
+
     print("  OK")
 
     # -------------------------------------------------------------------------
