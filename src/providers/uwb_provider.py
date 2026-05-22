@@ -116,6 +116,14 @@ class UwbProvider:
                 buf.extend(chunk)
                 if b"dwm>" in buf:
                     return
+                # streaming 중(lec ON 상태)이면 lec로 토글 off 후 dwm> 대기
+                if b"DIST" in buf or b"POS" in buf:
+                    logging.debug("UwbProvider: streaming active on enter, toggling lec off")
+                    buf.clear()
+                    with self._write_lock:
+                        self.ser.write(b"lec\r")
+                        self.ser.flush()
+                        time.sleep(0.1)
             else:
                 time.sleep(0.01)
 

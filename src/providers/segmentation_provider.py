@@ -20,7 +20,7 @@ from providers.realsense_camera_provider import RealSenseCameraProvider, CameraF
 
 _BASE_DIR = Path(__file__).resolve().parent
 
-_DEFAULT_ENGINE_PATH = _BASE_DIR / "engines" / "trt" / "ddrnet23_fp16_kist-v1-80k_1x480x640.engine"
+_DEFAULT_ENGINE_PATH = _BASE_DIR / "engines" / "trt" / "ddrnet23_fp16_kist-v1-l8-indoor-concat-aug3-720k-pre-320k_1x480x640.engine"
 _DEFAULT_LABELS_PATH = _BASE_DIR / "engines" / "labels" / "mapillary_vistas_ddrnet.yaml"
 
 
@@ -129,7 +129,7 @@ class SegmentationProvider:
 
         with open(_DEFAULT_LABELS_PATH) as f:
             _labels = yaml.safe_load(f)
-        self._class_lut = np.zeros(65, dtype=np.uint8)  # Mapillary Vistas: 65 classes
+        self._class_lut = np.zeros(215, dtype=np.uint8)  # Mapillary Vistas 65 + indoor 150 classes
         for cid in _labels.get("driveable", []): self._class_lut[cid] = 1  # driveable
         for cid in _labels.get("person",    []): self._class_lut[cid] = 2  # person
         for cid in _labels.get("avoid",     []): self._class_lut[cid] = 3  # avoid

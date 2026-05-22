@@ -87,7 +87,6 @@ class DwaRouteProvider:
         theta_turn_deg: float = 40.0,
         allow_backward: bool = False,
         yaw_limit_deg: float = 30.0,   # 후보 셀 탐색 각도 제한 (±yaw_limit_deg)
-        close_obstacle_align_dist: float = 0.4,  # 이 거리 이내 장애물이면 목표 방향으로 강제 정렬
     ) -> None:
         self._route = PathFollowProvider()
         self._bev = BEVOccupancyGridProvider()
@@ -126,7 +125,6 @@ class DwaRouteProvider:
         self.theta_turn = math.radians(float(theta_turn_deg))
         self.allow_backward_target = bool(allow_backward)
         self.yaw_limit = math.radians(float(yaw_limit_deg))
-        self.close_obstacle_align_dist = float(close_obstacle_align_dist)
 
         # ---- robot anchor in grid (legacy) ----
         # NOTE: BEV 쪽 dx=-0.34 보정을 이미 했다면, 여기 -0.34는 중복일 수 있음.
@@ -343,10 +341,6 @@ class DwaRouteProvider:
 
                 _, _, _, bx, by, bd = best
                 dx_dwa, dy_dwa = float(bx), float(by)
-
-                # 장애물이 매우 가까우면 목표 노드 방향으로 강제 정렬
-                if bd < self.close_obstacle_align_dist:
-                    dx_dwa, dy_dwa = float(dx_in), float(dy_in)
 
                 # 7) speed generation
                 theta = math.atan2(dy_dwa, dx_dwa)
