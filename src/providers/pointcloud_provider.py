@@ -73,11 +73,13 @@ class PointCloudProvider:
 
         self._data: Optional[PointCloudFrame] = None
         self._lock = threading.Lock()
+        self.frame_event = threading.Event()  # 새 프레임 처리 완료 신호
 
         self.running = False
         self._thread: Optional[threading.Thread] = None
         
         self._last_cnt: int = -1
+        self._last_frame_t: float = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -157,6 +159,10 @@ class PointCloudProvider:
 
         latency_s = float(time.monotonic() - t0)
 
+        now = time.monotonic()
+        pc_fps = 1.0 / (now - self._last_frame_t) if self._last_frame_t > 0.0 else 0.0
+        self._last_frame_t = now
+
         return PointCloudFrame(
             t_monotonic=float(cam_frame.t_monotonic),
             points=flat[mask],
@@ -166,7 +172,7 @@ class PointCloudProvider:
             cx=float(scaled_cx),
             cy=float(scaled_cy),
             latency_s=latency_s,
-            pointcloud_fps=1.0 / latency_s if latency_s > 0 else 0.0,
+            pointcloud_fps=pc_fps,
             frame_cnt=cam_frame.frame_cnt,
         )
 
@@ -179,19 +185,22 @@ class PointCloudProvider:
     def _run(self) -> None:
         while self.running:
             try:
+                signaled = self.segmentation_provider.frame_event.wait(timeout=0.1)
+                if not signaled:
+                    continue
+                self.segmentation_provider.frame_event.clear()
                 cam_frame = self.camera_provider.data
                 seg_frame = self.segmentation_provider.data
                 if (
                     cam_frame is not None
                     and seg_frame is not None
                     and cam_frame.frame_cnt != self._last_cnt
-                    and cam_frame.frame_cnt == seg_frame.frame_cnt
+                    and abs(cam_frame.frame_cnt - seg_frame.frame_cnt) <= 2
                 ):
                     self._last_cnt = cam_frame.frame_cnt
                     with self._lock:
                         self._data = self._process_frame(cam_frame, seg_frame)
-                else:
-                    time.sleep(0.001)
+                    self.frame_event.set()
             except Exception as e:
                 logging.error(f"PointCloudProvider: run loop error: {e}")
                 with self._lock:

@@ -77,6 +77,7 @@ class RealSenseCameraProvider:
 
         self._data: Optional[CameraFrame] = None
         self._lock = threading.Lock()
+        self.frame_event = threading.Event()  # 새 프레임 도착 신호
 
         self.running = False
         self._thread: Optional[threading.Thread] = None
@@ -251,6 +252,7 @@ class RealSenseCameraProvider:
                 frame = self._read_frame()
                 with self._lock:
                     self._data = frame
+                self.frame_event.set()
             except Exception as e:
                 logging.error(f"RealSenseCameraProvider: run loop error: {e}")
                 with self._lock:

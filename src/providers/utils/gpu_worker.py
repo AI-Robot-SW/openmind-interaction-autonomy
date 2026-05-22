@@ -6,6 +6,8 @@ GPUWorker — CUDA context를 소유하는 전용 스레드.
 모든 CUDA 호출(TRT 추론, 커널 실행 등)은 이 스레드에서만 실행.
 provider thread는 submit()으로 작업을 제출하고 Future.result()로 결과를 대기.
 
+각 provider가 독립 인스턴스를 생성해 GPU 경합을 줄인다.
+
 Usage:
     worker = GPUWorker()
 
@@ -24,17 +26,15 @@ from typing import Callable, TypeVar
 
 import pycuda.driver as cuda
 
-from providers.singleton import singleton
-
 
 T = TypeVar("T")
 
 
-@singleton
 class GPUWorker:
     """
-    CUDA context를 소유하는 전용 싱글톤 스레드.
+    CUDA context를 소유하는 전용 스레드.
     모든 CUDA 호출은 이 스레드를 통해 직렬 실행된다.
+    각 provider가 독립 인스턴스를 생성해 pipeline 간 경합을 방지한다.
     """
 
     def __init__(self) -> None:

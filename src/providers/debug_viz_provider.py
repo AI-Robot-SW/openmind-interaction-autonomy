@@ -18,6 +18,7 @@ from .navigation_provider import NavigationProvider
 from .kf_position_provider import KfPositionProvider
 from .realsense_camera_provider import RealSenseCameraProvider
 from .segmentation_provider import SegmentationProvider
+from .pointcloud_provider import PointCloudProvider
 
 
 _DWA_M2PX = 55
@@ -205,6 +206,10 @@ class DebugVizProvider:
 
         self._put(p, f"BEV  {bev_frame.bev_fps:.0f}fps",
                   (4, 14), color=(220, 220, 50))
+        pc_frame = PointCloudProvider().data
+        if pc_frame is not None:
+            self._put(p, f"PC   {pc_frame.pointcloud_fps:.0f}fps",
+                      (4, 28), color=(220, 220, 50))
         return p
 
     # ── Panel 3: Segmentation ─────────────────────────────────────────────────

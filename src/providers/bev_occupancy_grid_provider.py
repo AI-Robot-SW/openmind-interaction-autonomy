@@ -98,6 +98,7 @@ class BEVOccupancyGridProvider:
         self._grid_shape = (self.height, self.width)
         self._inv_res    = 1.0 / self.res
         self._last_cnt:  int = -1
+        self._last_frame_t: float = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -157,6 +158,7 @@ class BEVOccupancyGridProvider:
             self._gpu_worker = None
 
         self._last_cnt = -1
+        self._last_frame_t = 0.0
         with self._lock:
             self._data = None
 
@@ -174,12 +176,16 @@ class BEVOccupancyGridProvider:
         bev       = self._render_occupancy_grid_debug_image(occ.data)
         latency_s = float(time.monotonic() - t0)
 
+        now = time.monotonic()
+        bev_fps = 1.0 / (now - self._last_frame_t) if self._last_frame_t > 0.0 else 0.0
+        self._last_frame_t = now
+
         return BEVFrame(
             t_monotonic=float(pc_frame.t_monotonic),
             bev_image=bev,
             occupancy_grid=occ,
             latency_s=latency_s,
-            bev_fps=1.0 / latency_s if latency_s > 0.0 else 0.0,
+            bev_fps=bev_fps,
             frame_cnt=pc_frame.frame_cnt,
         )
 
@@ -247,17 +253,16 @@ class BEVOccupancyGridProvider:
     def _run(self) -> None:
         while self.running:
             try:
+                signaled = self.pointcloud_provider.frame_event.wait(timeout=0.1)
+                if not signaled:
+                    continue
+                self.pointcloud_provider.frame_event.clear()
                 pc_frame = self.pointcloud_provider.data
-                if (
-                    pc_frame is not None
-                    and pc_frame.frame_cnt != self._last_cnt
-                ):
+                if pc_frame is not None and pc_frame.frame_cnt != self._last_cnt:
                     self._last_cnt = pc_frame.frame_cnt
                     frame = self._process_frame(pc_frame)
                     with self._lock:
                         self._data = frame
-                else:
-                    time.sleep(0.001)
             except Exception as e:
                 logging.error(f"BEVOccupancyGridProvider: run loop error: {e}")
                 with self._lock:
