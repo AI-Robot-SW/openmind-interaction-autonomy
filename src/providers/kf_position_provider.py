@@ -43,7 +43,7 @@ from .utils.kf_utils.rtk_odom_aekf import RtkOdomAEKF
 _TICK_SEC = 0.05  # 20 Hz
 
 # RTK EKF on/off 조건
-_HACC_INIT_M: float = 0.5       # 켜기: hAcc 이 값 이하
+_HACC_INIT_M: float = 0.2       # 켜기: hAcc 이 값 이하
 _HACC_RESET_M: float = 5.0      # 끄기: hAcc 이 값 이상
 _HACC_CONSEC_INIT: int = 5      # 켜기에 필요한 연속 횟수
 _HACC_CONSEC_RESET: int = 10    # 끄기에 필요한 연속 횟수

@@ -31,12 +31,19 @@ class PointCloudFrame:
     """
     t_monotonic    : 원본 CameraFrame의 t_monotonic (동기화 기준)
     points         : (N, 4) float32 — X, Y, Z, RGB-packed-as-float
+    semantic_map   : (H, W) uint8 — segmentation class map (stride 적용 해상도)
+    fx, fy, cx, cy : semantic_map 해상도 기준 intrinsics
     latency_s      : pointcloud 처리 시간 (초)
     pointcloud_fps : 1 / latency_s
     frame_cnt      : 대응하는 CameraFrame.frame_cnt — 동기화 기준
     """
     t_monotonic:    float
     points:         np.ndarray
+    semantic_map:   np.ndarray
+    fx:             float
+    fy:             float
+    cx:             float
+    cy:             float
     latency_s:      float
     pointcloud_fps: float
     frame_cnt:      int
@@ -66,11 +73,13 @@ class PointCloudProvider:
 
         self._data: Optional[PointCloudFrame] = None
         self._lock = threading.Lock()
+        self.frame_event = threading.Event()  # 새 프레임 처리 완료 신호
 
         self.running = False
         self._thread: Optional[threading.Thread] = None
         
         self._last_cnt: int = -1
+        self._last_frame_t: float = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -113,29 +122,57 @@ class PointCloudProvider:
             
         logging.info("PointCloudProvider stopped")
 
-
     def _process_frame(self, cam_frame: CameraFrame, seg_frame) -> PointCloudFrame:
-        t0     = time.monotonic()
+        t0 = time.monotonic()
         stride = max(1, self.stride)
-        depth  = cam_frame.depth[::stride, ::stride]
-        color  = _SEMANTIC_COLORS[seg_frame.semantic_map][::stride, ::stride]
-        intr   = cam_frame.intrinsics
+
+        depth = cam_frame.depth[::stride, ::stride]
+        semantic_map = seg_frame.semantic_map[::stride, ::stride]
+        color = _SEMANTIC_COLORS[semantic_map]
+        intr = cam_frame.intrinsics
+
+        scaled_fx = intr.fx / stride
+        scaled_fy = intr.fy / stride
+        scaled_cx = intr.cx / stride
+        scaled_cy = intr.cy / stride
 
         flat = self._gpu_worker.submit(
-            lambda: self._kernel.run(depth, color, intr.fx, intr.fy, intr.cx, intr.cy, self.range_max)
+            lambda: self._kernel.run(
+                depth,
+                color,
+                scaled_fx,
+                scaled_fy,
+                scaled_cx,
+                scaled_cy,
+                self.range_max,
+            )
         ).result()
 
         if self.range_max is not None:
-            mask = (flat[:, 2] > 0.0) & (flat[:, 2] <= self.range_max) & np.isfinite(flat[:, 2])
+            mask = (
+                (flat[:, 2] > 0.0)
+                & (flat[:, 2] <= self.range_max)
+                & np.isfinite(flat[:, 2])
+            )
         else:
             mask = (flat[:, 2] > 0.0) & np.isfinite(flat[:, 2])
 
         latency_s = float(time.monotonic() - t0)
+
+        now = time.monotonic()
+        pc_fps = 1.0 / (now - self._last_frame_t) if self._last_frame_t > 0.0 else 0.0
+        self._last_frame_t = now
+
         return PointCloudFrame(
             t_monotonic=float(cam_frame.t_monotonic),
             points=flat[mask],
+            semantic_map=semantic_map.astype(np.uint8, copy=False),
+            fx=float(scaled_fx),
+            fy=float(scaled_fy),
+            cx=float(scaled_cx),
+            cy=float(scaled_cy),
             latency_s=latency_s,
-            pointcloud_fps=1.0 / latency_s if latency_s > 0 else 0.0,
+            pointcloud_fps=pc_fps,
             frame_cnt=cam_frame.frame_cnt,
         )
 
@@ -148,19 +185,22 @@ class PointCloudProvider:
     def _run(self) -> None:
         while self.running:
             try:
+                signaled = self.segmentation_provider.frame_event.wait(timeout=0.1)
+                if not signaled:
+                    continue
+                self.segmentation_provider.frame_event.clear()
                 cam_frame = self.camera_provider.data
                 seg_frame = self.segmentation_provider.data
                 if (
                     cam_frame is not None
                     and seg_frame is not None
                     and cam_frame.frame_cnt != self._last_cnt
-                    and cam_frame.frame_cnt == seg_frame.frame_cnt
+                    and abs(cam_frame.frame_cnt - seg_frame.frame_cnt) <= 2
                 ):
                     self._last_cnt = cam_frame.frame_cnt
                     with self._lock:
                         self._data = self._process_frame(cam_frame, seg_frame)
-                else:
-                    time.sleep(0.001)
+                    self.frame_event.set()
             except Exception as e:
                 logging.error(f"PointCloudProvider: run loop error: {e}")
                 with self._lock:

@@ -73,7 +73,7 @@ class DwaRouteProvider:
         ahead_m: float = 2.0,
         half_width_m: float = 1.2,
         stride: int = 1,
-        unknown_is_obstacle: bool = False,  # True여도 코스트에 반영 안 됨 (pass 유지, 초기 관측전 출발성 확보)
+        unknown_is_obstacle: bool = True,   # unknown(-1) 셀을 장애물과 동일하게 처리
         # speed
         kv: float = 0.6,  # reserved — currently unused (vx_cmd uses vx_fixed directly)
         kyaw: float = 1.0,
@@ -86,6 +86,7 @@ class DwaRouteProvider:
         enable_turn_in_place: bool = True,
         theta_turn_deg: float = 40.0,
         allow_backward: bool = False,
+        yaw_limit_deg: float = 30.0,   # 후보 셀 탐색 각도 제한 (±yaw_limit_deg)
     ) -> None:
         self._route = PathFollowProvider()
         self._bev = BEVOccupancyGridProvider()
@@ -123,6 +124,7 @@ class DwaRouteProvider:
         self.enable_turn_in_place = bool(enable_turn_in_place)
         self.theta_turn = math.radians(float(theta_turn_deg))
         self.allow_backward_target = bool(allow_backward)
+        self.yaw_limit = math.radians(float(yaw_limit_deg))
 
         # ---- robot anchor in grid (legacy) ----
         # NOTE: BEV 쪽 dx=-0.34 보정을 이미 했다면, 여기 -0.34는 중복일 수 있음.
@@ -296,9 +298,18 @@ class DwaRouteProvider:
                         occ_ij = int(grid[i, j])
 
                         if self.unknown_is_obstacle and occ_ij < 0:
-                            pass
+                            obs_unknown = float(self.obstacle_cost)
+                        else:
+                            obs_unknown = 0.0
 
                         x = j * res + x0
+
+                        # 로봇 기준 각도 제한: ±yaw_limit 이내 셀만 후보로
+                        dx_r = x - self.robot_x_offset_m
+                        dy_r = y - self.robot_y_offset_m
+                        if abs(math.atan2(dy_r, max(dx_r, 1e-6))) > self.yaw_limit:
+                            continue
+
                         base = (x - dx_in) ** 2 + base_y
 
                         d = float(dist[i, j])
@@ -311,6 +322,7 @@ class DwaRouteProvider:
                             float(self.w_goal) * base
                             + float(self.w_clear) * obs_soft
                             + obs_hard
+                            + obs_unknown
                         )
 
                         if best is None or cost < best[0]:

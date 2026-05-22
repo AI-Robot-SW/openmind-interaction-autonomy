@@ -20,7 +20,7 @@ from providers.realsense_camera_provider import RealSenseCameraProvider, CameraF
 
 _BASE_DIR = Path(__file__).resolve().parent
 
-_DEFAULT_ENGINE_PATH = _BASE_DIR / "engines" / "trt" / "ddrnet23_fp16_kist-v1-80k_1x480x640.engine"
+_DEFAULT_ENGINE_PATH = _BASE_DIR / "engines" / "trt" / "ddrnet23_fp16_kist-v1-l8-indoor-concat-aug3-720k-pre-320k_1x480x640.engine"
 _DEFAULT_LABELS_PATH = _BASE_DIR / "engines" / "labels" / "mapillary_vistas_ddrnet.yaml"
 
 
@@ -72,11 +72,13 @@ class SegmentationProvider:
 
         self._data: Optional[SegmentationFrame] = None
         self._lock = threading.Lock()
+        self.frame_event = threading.Event()  # 새 프레임 처리 완료 신호
 
         self.running = False
         self._thread: Optional[threading.Thread] = None
 
         self._last_cnt: int = -1
+        self._last_frame_t: float = 0.0
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -129,7 +131,7 @@ class SegmentationProvider:
 
         with open(_DEFAULT_LABELS_PATH) as f:
             _labels = yaml.safe_load(f)
-        self._class_lut = np.zeros(65, dtype=np.uint8)  # Mapillary Vistas: 65 classes
+        self._class_lut = np.zeros(215, dtype=np.uint8)  # Mapillary Vistas 65 + indoor 150 classes
         for cid in _labels.get("driveable", []): self._class_lut[cid] = 1  # driveable
         for cid in _labels.get("person",    []): self._class_lut[cid] = 2  # person
         for cid in _labels.get("avoid",     []): self._class_lut[cid] = 3  # avoid
@@ -165,12 +167,17 @@ class SegmentationProvider:
         sem = cv2.resize(semantic_map_small, (w, h), interpolation=cv2.INTER_NEAREST)
 
         latency_s = float(time.monotonic() - t0)
+
+        now = time.monotonic()
+        seg_fps = 1.0 / (now - self._last_frame_t) if self._last_frame_t > 0.0 else 0.0
+        self._last_frame_t = now
+
         return SegmentationFrame(
             t_monotonic=float(frame.t_monotonic),
             semantic_map=sem,
             classes=np.unique(predicted_class_map).astype(int).tolist(),
             latency_s=latency_s,
-            segmentation_fps=1.0 / latency_s if latency_s > 0 else 0.0,
+            segmentation_fps=seg_fps,
             frame_cnt=frame.frame_cnt,
         )
 
@@ -191,16 +198,16 @@ class SegmentationProvider:
 
         while self.running:
             try:
+                signaled = self.camera_provider.frame_event.wait(timeout=0.1)
+                if not signaled:
+                    continue
+                self.camera_provider.frame_event.clear()
                 cam_frame = self.camera_provider.data
-                if (
-                    cam_frame is not None
-                    and cam_frame.frame_cnt != self._last_cnt
-                ):
+                if cam_frame is not None and cam_frame.frame_cnt != self._last_cnt:
                     self._last_cnt = cam_frame.frame_cnt
                     with self._lock:
                         self._data = self._process_frame(cam_frame)
-                else:
-                    time.sleep(0.001)
+                    self.frame_event.set()
             except Exception as e:
                 logging.error(f"SegmentationProvider: run loop error: {e}")
                 with self._lock:

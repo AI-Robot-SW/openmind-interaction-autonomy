@@ -103,10 +103,10 @@
         { "type": "AudioBg", "config": { "sample_rate": 44100, "channels": 1, "device_name": "USB Advanced Audio", "vad_enabled": true } },
         { "type": "STTBg", "config": { "sample_rate": 44100 } },
         { "type": "TTSBg", "config": { "backend": "naver_clova", "output_format": "wav" } },
-        { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30 } },
+        { "type": "RealSenseCameraBg", "config": { "camera_index": 0, "width": 640, "height": 480, "fps": 30, "enable_depth_filters": true } },
         { "type": "SegmentationBg", "config": {} },
         { "type": "PointCloudBg", "config": { "range_max": null, "stride": 1 } },
-        { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 50, "height": 60, "origin_x": 0.0, "origin_y": -1.5, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 1 } },
+        { "type": "BEVOccupancyGridBg", "config": { "res": 0.05, "width": 140, "height": 120, "origin_x": -0.5, "origin_y": -3.0, "dx": -0.34, "dy": 0.0, "closing_kernel_size": 3, "camera_height_m": 0.413, "ground_projection_stride": 4 } },
         { "type": "DistMapBg", "config": { "max_dist": 5.0 } },
         { "type": "RtkBg", "config": { "port": "/dev/ttyACM0", "baud": 115200, "meas_rate_ms": 100, "caster": "rts2.ngii.go.kr", "ntrip_port": 2101, "mountpoint": "VRS-RTCM32", "user": "dori0126", "password": "ngii" } },
 

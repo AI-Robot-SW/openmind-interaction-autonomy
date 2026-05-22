@@ -15,8 +15,10 @@ from .bev_occupancy_grid_provider import BEVOccupancyGridProvider
 from .dwa_route_provider import DwaRouteProvider
 from .path_follow_provider import PathFollowProvider
 from .navigation_provider import NavigationProvider
+from .kf_position_provider import KfPositionProvider
 from .realsense_camera_provider import RealSenseCameraProvider
 from .segmentation_provider import SegmentationProvider
+from .pointcloud_provider import PointCloudProvider
 
 
 _DWA_M2PX = 55
@@ -204,6 +206,10 @@ class DebugVizProvider:
 
         self._put(p, f"BEV  {bev_frame.bev_fps:.0f}fps",
                   (4, 14), color=(220, 220, 50))
+        pc_frame = PointCloudProvider().data
+        if pc_frame is not None:
+            self._put(p, f"PC   {pc_frame.pointcloud_fps:.0f}fps",
+                      (4, 28), color=(220, 220, 50))
         return p
 
     # ── Panel 3: Segmentation ─────────────────────────────────────────────────
@@ -233,11 +239,12 @@ class DebugVizProvider:
                   (4, 14), color=(220, 220, 50))
         return p
 
-    # ── Panel 4: DWA Local View ───────────────────────────────────────────────
+    # ── Panel 4: DWA Local View + Navigation Nodes ───────────────────────────
 
     def _panel_dwa_local(self, W: int, H: int) -> np.ndarray:
         dwa_rec = DwaRouteProvider().data
         path_rec = PathFollowProvider().data
+        kf_rec   = KfPositionProvider().data
 
         p = self._blank(W, H, (15, 15, 25))
         cx, cy = W // 2, H // 2
@@ -255,31 +262,175 @@ class DebugVizProvider:
         body_color = _MODE_COLOR.get(mode, (120, 120, 120))
         cv2.circle(p, (cx, cy), 13, body_color, 2)
 
-        if path_rec is not None:
-            gx = int(cx - path_rec.dy * _DWA_M2PX)
-            gy = int(cy - path_rec.dx * _DWA_M2PX)
-            cv2.arrowedLine(p, (cx, cy), (gx, gy), (0, 160, 255), 1, tipLength=0.25)
+        # ── 경로 노드 오버레이 ─────────────────────────────────
+        # KF에서 로봇 world 위치와 heading을 구해 각 노드를 body frame으로 변환해 그린다.
+        robot_wx = robot_wy = robot_th = None
+        cos_t = sin_t = 0.0
+        rtk_origin = None
 
-        if dwa_rec is not None:
-            dx = int(cx - dwa_rec.dy_dwa * _DWA_M2PX)
-            dy = int(cy - dwa_rec.dx_dwa * _DWA_M2PX)
-            cv2.arrowedLine(p, (cx, cy), (dx, dy), (0, 235, 80), 2, tipLength=0.25)
+        if kf_rec is not None:
+            pf_prov = PathFollowProvider()
+            pf_rec_local = pf_prov.data
+
+            # 활성 frame에 따라 로봇 world 좌표 결정
+            frame = pf_rec_local.frame if pf_rec_local else ""
+            use_uwb = (frame != "wgs84" and kf_rec.uwb_ready
+                       and kf_rec.uwb_x_m is not None and kf_rec.uwb_theta_rad is not None)
+            use_rtk = (not use_uwb and kf_rec.rtk_ready
+                       and kf_rec.rtk_lat is not None and kf_rec.rtk_theta_rad is not None)
+
+            robot_wx = robot_wy = robot_th = None
+            rtk_origin = KfPositionProvider().rtk_ekf.origin if use_rtk else None
+
+            if use_uwb:
+                robot_wx, robot_wy, robot_th = (
+                    kf_rec.uwb_x_m, kf_rec.uwb_y_m, kf_rec.uwb_theta_rad
+                )
+            elif use_rtk and rtk_origin:
+                from .utils.geo_utils import latlon_to_enu
+                robot_wx, robot_wy = latlon_to_enu(
+                    kf_rec.rtk_lat, kf_rec.rtk_lon, rtk_origin[0], rtk_origin[1]
+                )
+                robot_th = kf_rec.rtk_theta_rad
+
+            if robot_wx is not None:
+                import math
+                cos_t = math.cos(robot_th)
+                sin_t = math.sin(robot_th)
+
+                with pf_prov._lock:
+                    trackers    = pf_prov._trackers
+                    active_idx  = pf_prov._active_idx
+
+                for seg_i, tracker in enumerate(trackers):
+                    passed_cnt = tracker._idx
+                    for node_i, ref in enumerate(tracker.path):
+                        graph = tracker._loader.get_graph(ref[0])
+                        if graph is None:
+                            continue
+                        nd = graph.nodes.get(ref[1])
+                        if nd is None:
+                            continue
+
+                        # 노드 world 좌표
+                        if graph.coordinate_frame == "wgs84":
+                            if nd.lat is None or rtk_origin is None:
+                                continue
+                            from .utils.geo_utils import latlon_to_enu as _l2e
+                            nx, ny = _l2e(nd.lat, nd.lon, rtk_origin[0], rtk_origin[1])
+                        else:
+                            if nd.x is None:
+                                continue
+                            nx, ny = float(nd.x), float(nd.y)
+
+                        # world → body frame
+                        dx_w = nx - robot_wx
+                        dy_w = ny - robot_wy
+                        bfwd  =  cos_t * dx_w + sin_t * dy_w
+                        bleft = -sin_t * dx_w + cos_t * dy_w
+
+                        # body frame → pixel
+                        px_ = int(cx - bleft * _DWA_M2PX)
+                        py_ = int(cy - bfwd  * _DWA_M2PX)
+
+                        if not (0 <= px_ < W and 0 <= py_ < H):
+                            continue
+
+                        # 색상: 통과=회색, 현재 목표=빨강, 미통과=파랑
+                        is_passed  = (seg_i < active_idx or
+                                      (seg_i == active_idx and node_i < passed_cnt))
+                        is_current = (seg_i == active_idx and node_i == passed_cnt)
+
+                        if is_current:
+                            color_n, radius = (0, 30, 255), 8
+                        elif is_passed:
+                            color_n, radius = (110, 110, 110), 4
+                        else:
+                            color_n, radius = (0, 165, 255), 6
+
+                        cv2.circle(p, (px_, py_), radius, color_n, -1)
+                        if is_current:
+                            cv2.circle(p, (px_, py_), radius + 3, (0, 80, 255), 2)
+                            # 목표 노드 ID 표시
+                            lbl = f"#{ref[1]}"
+                            self._put(p, lbl, (px_ + 8, py_), color=(80, 160, 255), scale=0.30)
+
+        # ── raw 센서 위치를 X 마커로 표시 ─────────────────────
+        if robot_wx is not None:
+            import math as _math
+
+            def _draw_raw_x(world_x: float, world_y: float,
+                            color: tuple, size: int = 5) -> None:
+                dx_w = world_x - robot_wx
+                dy_w = world_y - robot_wy
+                bfwd_  =  cos_t * dx_w + sin_t * dy_w
+                bleft_ = -sin_t * dx_w + cos_t * dy_w
+                qx = int(cx - bleft_ * _DWA_M2PX)
+                qy = int(cy - bfwd_  * _DWA_M2PX)
+                if 0 <= qx < W and 0 <= qy < H:
+                    cv2.drawMarker(p, (qx, qy), color,
+                                   markerType=cv2.MARKER_TILTED_CROSS,
+                                   markerSize=size * 2, thickness=2,
+                                   line_type=cv2.LINE_AA)
+
+            # UWB raw
+            uwb_raw = UwbProvider().data
+            if uwb_raw is not None and uwb_raw.x_m is not None:
+                _draw_raw_x(uwb_raw.x_m, uwb_raw.y_m, (30, 30, 255), size=7)  # 진한 파랑 X
+
+            # RTK raw (ENU 변환)
+            rtk_raw = RtkProvider().data
+            if rtk_raw is not None and rtk_raw.lat is not None and rtk_origin is not None:
+                from .utils.geo_utils import latlon_to_enu as _l2e2
+                rx_enu, ry_enu = _l2e2(rtk_raw.lat, rtk_raw.lon,
+                                        rtk_origin[0], rtk_origin[1])
+                _draw_raw_x(rx_enu, ry_enu, (0, 230, 230), size=7)  # 진한 청록 X
+
+        # ── KF yaw 기반 heading 화살표 ───────────────────────
+        if kf_rec is not None:
+            import math as _math
+            theta = None
+            yaw_src = ""
+            if kf_rec.uwb_ready and kf_rec.uwb_theta_rad is not None:
+                theta = kf_rec.uwb_theta_rad
+                yaw_src = "UWB"
+            elif kf_rec.rtk_ready and kf_rec.rtk_theta_rad is not None:
+                theta = kf_rec.rtk_theta_rad
+                yaw_src = "RTK"
+
+            if theta is not None:
+                # body frame 기준: forward = 화면 위, left = 화면 왼쪽
+                # heading은 world frame 각도이므로 body frame에서는 항상 정면(위쪽)으로 그린다
+                arrow_len = int(1.0 * _DWA_M2PX)
+                cv2.arrowedLine(
+                    p, (cx, cy), (cx, cy - arrow_len),
+                    (0, 255, 160), 2, tipLength=0.20, line_type=cv2.LINE_AA,
+                )
+                self._put(p, f"{_math.degrees(theta):+.1f}deg ({yaw_src})",
+                          (cx + 4, cy - arrow_len + 4), color=(0, 220, 130), scale=0.30)
 
         lines: list[tuple[str, tuple]] = [
-            ("DWA Local  (body-frame)", (180, 180, 180)),
-            (f"mode: {mode}", body_color),
+            ("Nav Map  (body-frame)", (180, 180, 180)),
         ]
+        if kf_rec is not None:
+            cal_str = ""
+            if kf_rec.uwb_ready:
+                cal_str += f"UWB {'yaw OK' if kf_rec.uwb_yaw_calibrated else 'yaw...'}"
+            if kf_rec.rtk_ready:
+                cal_str += f"  RTK {'yaw OK' if kf_rec.rtk_yaw_calibrated else 'yaw...'}"
+            if cal_str:
+                lines.append((cal_str, (80, 220, 80)))
         if dwa_rec is not None:
             lines += [
-                (f"dwa goal : ({dwa_rec.dx_dwa:+.2f}, {dwa_rec.dy_dwa:+.2f}) m", (200, 200, 200)),
-                (f"clearance: {dwa_rec.best_clearance_m:.2f} m", (200, 200, 200)),
-                (f"vx={dwa_rec.vx_cmd:.2f}  vyaw={dwa_rec.vyaw_cmd:.2f}", (200, 200, 200)),
+                (f"mode: {dwa_rec.mode}  vx={dwa_rec.vx_cmd:.2f}  vyaw={dwa_rec.vyaw_cmd:.2f}",
+                 _MODE_COLOR.get(dwa_rec.mode, (120, 120, 120))),
             ]
             if dwa_rec.stop_reason != "none":
                 lines.append((f"stop: {dwa_rec.stop_reason}", (80, 80, 220)))
         if path_rec is not None:
             lines.append(
-                (f"path goal: ({path_rec.dx:+.2f}, {path_rec.dy:+.2f}) m", (80, 160, 255))
+                (f"path: ({path_rec.dx:+.2f}, {path_rec.dy:+.2f}) m  "
+                 f"[{path_rec.node_idx}/{path_rec.node_total}]", (80, 160, 255))
             )
 
         y_start = H - len(lines) * 14 - 4

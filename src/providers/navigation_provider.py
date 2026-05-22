@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from typing import Any, Dict, Optional, Tuple
 
 from .singleton import singleton
-from .rtk_provider import RtkProvider
 from .path_follow_provider import PathFollowProvider
 from .kf_position_provider import KfPositionProvider
 from .dwa_route_provider import DwaRouteProvider
@@ -135,11 +134,12 @@ class NavigationProvider:
         if kf is None or not kf.rtk_ready or not kf.rtk_yaw_calibrated:
             raise ValueError("NavigationProvider: KF heading 보정이 아직 완료되지 않았습니다")
 
-        gnss = RtkProvider().data
-        if gnss is None or gnss.lat is None or gnss.lon is None:
-            raise ValueError("NavigationProvider: GNSS 위치를 아직 사용할 수 없습니다")
+        # EKF smoothed 위치를 사용해야 nearest node 선택이 정확하다.
+        # RTK raw(gnss.lat/lon)는 수 미터 오차가 있어 잘못된 start node를 선택할 수 있다.
+        if kf.rtk_lat is None or kf.rtk_lon is None:
+            raise ValueError("NavigationProvider: RTK EKF 위치를 아직 사용할 수 없습니다")
 
-        start_ref = self._path_finder.nearest_wgs_node(float(gnss.lat), float(gnss.lon))
+        start_ref = self._path_finder.nearest_wgs_node(float(kf.rtk_lat), float(kf.rtk_lon))
         goal_ref = self._path_finder.resolve_place_to_node(place_id)
 
         segments = self._path_finder.find_path(start_ref, goal_ref)
